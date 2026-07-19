@@ -36,7 +36,7 @@ def get_keyboard():
     kb = [
         [KeyboardButton(text="Підписатись"), KeyboardButton(text="Відписатись")],
         [KeyboardButton(text="Розм'ютити"), KeyboardButton(text="Зам'ютити")],
-        [KeyboardButton(text="Інфо")]
+        [KeyboardButton(text="Статус"), KeyboardButton(text="Інфо")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -74,6 +74,16 @@ async def mute_action(message: types.Message):
     else:
         await message.answer("Ви ще не підписані. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
 
+@dp.message(F.text == "Статус")
+async def status_action(message: types.Message):
+    user = user_manager.get_user(message.from_user.id)
+    if not user:
+        await message.answer("Ви не підписані на сповіщення. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
+    elif user.muted:
+        await message.answer("Ваш статус: ЗАМ'ЮЧЕНО\nВи не будете отримувати тривоги до наступного відбою або поки не натиснете 'Розм'ютити'.", reply_markup=get_keyboard())
+    else:
+        await message.answer("Ваш статус: АКТИВНО\nВи отримуєте всі сповіщення про нові загрози.", reply_markup=get_keyboard())
+
 @dp.message(F.text == "Інфо")
 async def info_action(message: types.Message):
     info_text = (
@@ -82,12 +92,14 @@ async def info_action(message: types.Message):
         "• <b>Підписатись</b> — отримувати сповіщення\n"
         "• <b>Відписатись</b> — повністю перестати отримувати сповіщення\n"
         "• <b>Зам'ютити</b> — тимчасово вимкнути сповіщення (наприклад, якщо ви вже в укритті)\n"
-        "• <b>Розм'ютити</b> — увімкнути сповіщення знову\n\n"
+        "• <b>Розм'ютити</b> — увімкнути сповіщення знову\n"
+        "• <b>Статус</b> — перевірити, чи увімкнені у вас зараз сповіщення\n\n"
         "<i>При надсиланні тривоги бот м'ютить вас автоматично, щоб не спамити. При відбої — розм'ючує.</i>"
     )
     await message.answer(info_text, parse_mode="HTML", reply_markup=get_keyboard())
 
 @app.on_message(filters.chat(config.CHANNELS_TO_MONITOR))
+@app.on_edited_message(filters.chat(config.CHANNELS_TO_MONITOR))
 async def handle_channel_message(client: Client, message: Message):
     text = message.text or message.caption
     if not text:
@@ -127,7 +139,7 @@ async def handle_channel_message(client: Client, message: Message):
         unmuted_ids = user_manager.unmute_all_users()
         for uid in unmuted_ids:
             try:
-                await bot.send_message(chat_id=uid, text="Відбій тривоги/Чисто. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
+                await bot.send_message(chat_id=uid, text="Чисто. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
             except Exception as e:
                 logging.error(e)
         return  # Зупиняємось, щоб не парсити повідомлення далі
