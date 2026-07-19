@@ -16,7 +16,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 
 import config
-import database
+from database import UserManager
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,9 +29,12 @@ app = Client(
     api_hash=config.API_HASH
 )
 
+user_manager = UserManager()
+
 def get_keyboard():
     kb = [
-        [KeyboardButton(text="Підписатись"), KeyboardButton(text="Відписатись")]
+        [KeyboardButton(text="Підписатись"), KeyboardButton(text="Відписатись")],
+        [KeyboardButton(text="Розм'ютити")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -41,13 +44,21 @@ async def handle_start(message: types.Message):
 
 @dp.message(F.text == "Підписатись")
 async def subscribe_action(message: types.Message):
-    database.add_user(message.from_user.id)
+    user_manager.add_user(message.from_user.id)
     await message.answer("Ви успішно підписалися на сповіщення!", reply_markup=get_keyboard())
 
 @dp.message(F.text == "Відписатись")
 async def unsubscribe_action(message: types.Message):
-    database.remove_user(message.from_user.id)
+    user_manager.remove_user(message.from_user.id)
     await message.answer("Ви відписалися від сповіщень.", reply_markup=get_keyboard())
+
+@dp.message(F.text == "Розм'ютити")
+async def unmute_action(message: types.Message):
+    success = user_manager.unmute_user(message.from_user.id)
+    if success:
+        await message.answer("Сповіщення відновлено! Ви почуєте про наступну загрозу.", reply_markup=get_keyboard())
+    else:
+        await message.answer("Ви ще не підписані. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
 
 @app.on_message(filters.chat(config.CHANNELS_TO_MONITOR))
 async def handle_channel_message(client: Client, message: Message):
@@ -68,16 +79,22 @@ async def handle_channel_message(client: Client, message: Message):
         words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n@{chat_name} - {full_text}"
+        alert_text = f"[TimeSTAMP: {timestamp}]\nWARNING: {words_str}\n\n{chat_name} - {full_text}"
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
-        subscribed_users = database.load_users()
-        for user_id in subscribed_users:
-            try:
-                await bot.send_message(chat_id=user_id, text=alert_text)
-            except Exception as e:
-                logging.error(e)
+        users = user_manager.get_all_users()
+        sent_any = False
+        
+        for user in users:
+            # Метод send_alert сам перевіряє, чи не зам'ючений користувач, і м'ютить після відправки
+            was_sent = await user.send_alert(bot, alert_text)
+            if was_sent:
+                sent_any = True
+                
+        # Зберігаємо базу, якщо хоча б одного користувача було щойно зам'ючено
+        if sent_any:
+            user_manager.save()
 
 async def main():
     await app.start()
