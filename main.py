@@ -152,7 +152,7 @@ async def handle_channel_message(client: Client, message: Message):
         words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
+        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n@{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
