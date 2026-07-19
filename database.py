@@ -79,5 +79,16 @@ class UserManager:
             return True
         return False
 
+    def unmute_all_users(self) -> list:
+        """Розм'ючує всіх користувачів і повертає список їхніх ID, які були розм'ючені"""
+        unmuted_ids = []
+        for user in self.users.values():
+            if user.muted:
+                user.muted = False
+                unmuted_ids.append(user.user_id)
+        if unmuted_ids:
+            self.save()
+        return unmuted_ids
+
     def get_all_users(self):
         return list(self.users.values())

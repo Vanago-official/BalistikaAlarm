@@ -70,7 +70,17 @@ async def handle_channel_message(client: Client, message: Message):
     clean_text = clean_text.translate(str.maketrans('', '', string.punctuation))
     
     found_words = [word for word in config.TARGET_WORDS if word.lower() in clean_text]
+    clear_words = [word for word in config.CLEAR_WORDS if word.lower() in clean_text]
     
+    if clear_words:
+        unmuted_ids = user_manager.unmute_all_users()
+        for uid in unmuted_ids:
+            try:
+                await bot.send_message(chat_id=uid, text="Відбій тривоги. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
+            except Exception as e:
+                logging.error(e)
+        return  # Зупиняємось, щоб не парсити повідомлення далі
+        
     if found_words:
         chat_title = message.chat.title
         chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
@@ -79,7 +89,7 @@ async def handle_channel_message(client: Client, message: Message):
         words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n{chat_name} - {full_text}"
+        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
