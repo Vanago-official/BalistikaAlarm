@@ -35,7 +35,8 @@ user_manager = UserManager()
 def get_keyboard():
     kb = [
         [KeyboardButton(text="Підписатись"), KeyboardButton(text="Відписатись")],
-        [KeyboardButton(text="Розм'ютити")]
+        [KeyboardButton(text="Розм'ютити"), KeyboardButton(text="Зам'ютити")],
+        [KeyboardButton(text="Інфо")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -46,26 +47,55 @@ async def handle_start(message: types.Message):
 @dp.message(F.text == "Підписатись")
 async def subscribe_action(message: types.Message):
     user_manager.add_user(message.from_user.id)
+    logging.info(f"Користувач {message.from_user.id} ПІДПИСАВСЯ.")
     await message.answer("Ви успішно підписалися на сповіщення!", reply_markup=get_keyboard())
 
 @dp.message(F.text == "Відписатись")
 async def unsubscribe_action(message: types.Message):
     user_manager.remove_user(message.from_user.id)
+    logging.info(f"Користувач {message.from_user.id} ВІДПИСАВСЯ.")
     await message.answer("Ви відписалися від сповіщень.", reply_markup=get_keyboard())
 
 @dp.message(F.text == "Розм'ютити")
 async def unmute_action(message: types.Message):
     success = user_manager.unmute_user(message.from_user.id)
     if success:
+        logging.info(f"Користувач {message.from_user.id} РОЗМ'ЮТИВСЯ.")
         await message.answer("Сповіщення відновлено! Ви почуєте про наступну загрозу.", reply_markup=get_keyboard())
     else:
         await message.answer("Ви ще не підписані. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
+
+@dp.message(F.text == "Зам'ютити")
+async def mute_action(message: types.Message):
+    success = user_manager.mute_user(message.from_user.id)
+    if success:
+        logging.info(f"Користувач {message.from_user.id} ЗАМ'ЮТИВСЯ.")
+        await message.answer("Сповіщення тимчасово вимкнено. Ви не будете отримувати тривоги, поки не натиснете 'Розм'ютити' або поки не буде відбою.", reply_markup=get_keyboard())
+    else:
+        await message.answer("Ви ще не підписані. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
+
+@dp.message(F.text == "Інфо")
+async def info_action(message: types.Message):
+    info_text = (
+        "ℹ️ <b>Інформація про бота</b>\n\n"
+        "Цей бот моніторить канали на наявність повідомлень про швидкісні цілі та балістику.\n\n"
+        "• <b>Підписатись</b> — отримувати сповіщення\n"
+        "• <b>Відписатись</b> — повністю перестати отримувати сповіщення\n"
+        "• <b>Зам'ютити</b> — тимчасово вимкнути сповіщення (наприклад, якщо ви вже в укритті)\n"
+        "• <b>Розм'ютити</b> — увімкнути сповіщення знову\n\n"
+        "<i>При надсиланні тривоги бот м'ютить вас автоматично, щоб не спамити. При відбої — розм'ючує.</i>"
+    )
+    await message.answer(info_text, parse_mode="HTML", reply_markup=get_keyboard())
 
 @app.on_message(filters.chat(config.CHANNELS_TO_MONITOR))
 async def handle_channel_message(client: Client, message: Message):
     text = message.text or message.caption
     if not text:
         return
+    
+    chat_title = message.chat.title or "Unknown Chat"
+    # Щоб не спамити повними текстами, виводимо перші 100 символів
+    logging.info(f"[Повідомлення з {chat_title}] {text[:100]}...")
     
     clean_text = text.lower()
     clean_text = clean_text.translate(str.maketrans('', '', string.punctuation))

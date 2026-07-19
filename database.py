@@ -79,6 +79,14 @@ class UserManager:
             return True
         return False
 
+    def mute_user(self, user_id: int) -> bool:
+        """Повертає True, якщо юзера зам'ючено, і False якщо він не підписаний"""
+        if user_id in self.users:
+            self.users[user_id].muted = True
+            self.save()
+            return True
+        return False
+
     def unmute_all_users(self) -> list:
         """Розм'ючує всіх користувачів і повертає список їхніх ID, які були розм'ючені"""
         unmuted_ids = []
