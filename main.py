@@ -9,6 +9,7 @@ except RuntimeError:
 import logging
 import string
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
@@ -76,7 +77,7 @@ async def handle_channel_message(client: Client, message: Message):
         unmuted_ids = user_manager.unmute_all_users()
         for uid in unmuted_ids:
             try:
-                await bot.send_message(chat_id=uid, text="Відбій тривоги. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
+                await bot.send_message(chat_id=uid, text="Відбій тривоги/Чисто. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
             except Exception as e:
                 logging.error(e)
         return  # Зупиняємось, щоб не парсити повідомлення далі
@@ -85,11 +86,11 @@ async def handle_channel_message(client: Client, message: Message):
         chat_title = message.chat.title
         chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
         
-        timestamp = datetime.now().strftime("%d:%m:%Y %H:%M")
+        timestamp = datetime.now(ZoneInfo("Europe/Kyiv")).strftime("%d:%m:%Y %H:%M")
         words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
+        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n@{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
