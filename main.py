@@ -100,7 +100,27 @@ async def handle_channel_message(client: Client, message: Message):
     clean_text = text.lower()
     clean_text = clean_text.translate(str.maketrans('', '', string.punctuation))
     
-    found_words = [word for word in config.TARGET_WORDS if word.lower() in clean_text]
+    ignore_words = getattr(config, 'IGNORE_WORDS', [])
+    if any(iw.lower() in clean_text for iw in ignore_words):
+        return  # Це новина, зведення або повідомлення про наслідки, ігноруємо
+    
+    # Видаляємо пунктуацію з точних фраз для коректного порівняння з clean_text
+    exact_threats = [phrase.translate(str.maketrans('', '', string.punctuation)).lower() for phrase in getattr(config, 'EXACT_THREATS', [])]
+    found_words = [phrase for phrase in exact_threats if phrase in clean_text]
+    
+    # Якщо точних фраз немає, перевіряємо комбінацію: "дія" + "зброя"
+    if not found_words:
+        weapons = [w for w in getattr(config, 'WEAPONS', []) if w.lower() in clean_text]
+        actions = [a for a in getattr(config, 'ACTION_WORDS', []) if a.lower() in clean_text]
+        
+        # Сумісність зі старим TARGET_WORDS (якщо є)
+        legacy_targets = [w for w in getattr(config, 'TARGET_WORDS', []) if w.lower() in clean_text]
+        
+        if weapons and actions:
+            found_words = weapons + actions
+        elif legacy_targets and not hasattr(config, 'EXACT_THREATS'):
+            found_words = legacy_targets
+
     clear_words = [word for word in config.CLEAR_WORDS if word.lower() in clean_text]
     
     if clear_words:
@@ -120,7 +140,7 @@ async def handle_channel_message(client: Client, message: Message):
         words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n@{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
+        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
