@@ -9,7 +9,6 @@ except RuntimeError:
 import logging
 import string
 import re
-from datetime import datetime
 from zoneinfo import ZoneInfo
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
@@ -161,11 +160,10 @@ async def handle_channel_message(client: Client, message: Message):
         chat_title = message.chat.title
         chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
         
-        timestamp = datetime.now(ZoneInfo("Europe/Kyiv")).strftime("%d:%m:%Y %H:%M")
         words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n@{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
+        alert_text = f"{timestamp}\nWARNING: {words_str}\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
