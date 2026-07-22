@@ -8,6 +8,7 @@ except RuntimeError:
 
 import logging
 import string
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from aiogram import Bot, Dispatcher, types, F
@@ -20,6 +21,13 @@ import config
 from database import UserManager
 
 logging.basicConfig(level=logging.INFO)
+
+EXACT_THREATS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'EXACT_THREATS', [])]
+WEAPONS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'WEAPONS', [])]
+ACTION_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'ACTION_WORDS', [])]
+CANCEL_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'CANCEL_WORDS', [])]
+NEWS_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'NEWS_WORDS', [])]
+CLEAR_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'CLEAR_WORDS', [])]
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
@@ -110,40 +118,45 @@ async def handle_channel_message(client: Client, message: Message):
     logging.info(f"[Повідомлення з {chat_title}] {text[:100]}...")
     
     clean_text = text.lower()
-    clean_text = clean_text.translate(str.maketrans('', '', string.punctuation))
+    # Замінюємо пунктуацію на пробіли (крім апострофів), щоб уникнути злипання слів
+    clean_text = re.sub(r"[^\w\s']", ' ', clean_text)
     
-    ignore_words = getattr(config, 'IGNORE_WORDS', [])
-    if any(iw.lower() in clean_text for iw in ignore_words):
-        return  # Це новина, зведення або повідомлення про наслідки, ігноруємо
-    
-    # Видаляємо пунктуацію з точних фраз для коректного порівняння з clean_text
-    exact_threats = [phrase.translate(str.maketrans('', '', string.punctuation)).lower() for phrase in getattr(config, 'EXACT_THREATS', [])]
-    found_words = [phrase for phrase in exact_threats if phrase in clean_text]
-    
-    # Якщо точних фраз немає, перевіряємо комбінацію: "дія" + "зброя"
-    if not found_words:
-        weapons = [w for w in getattr(config, 'WEAPONS', []) if w.lower() in clean_text]
-        actions = [a for a in getattr(config, 'ACTION_WORDS', []) if a.lower() in clean_text]
-        
-        # Сумісність зі старим TARGET_WORDS (якщо є)
-        legacy_targets = [w for w in getattr(config, 'TARGET_WORDS', []) if w.lower() in clean_text]
-        
-        if weapons and actions:
-            found_words = weapons + actions
-        elif legacy_targets and not hasattr(config, 'EXACT_THREATS'):
-            found_words = legacy_targets
-
-    clear_words = [word for word in config.CLEAR_WORDS if word.lower() in clean_text]
-    
-    if clear_words:
+    # 1. Відбій
+    clear_matched = [rx.search(clean_text) for rx in CLEAR_WORDS_RX if rx.search(clean_text)]
+    if clear_matched:
         unmuted_ids = user_manager.unmute_all_users()
         for uid in unmuted_ids:
             try:
                 await bot.send_message(chat_id=uid, text="Чисто. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
             except Exception as e:
                 logging.error(e)
-        return  # Зупиняємось, щоб не парсити повідомлення далі
+        return  # Зупиняємось, відбій оброблено
         
+    # 2. Слова, що повністю скасовують тривогу (звіти, збиття)
+    cancel_matched = [rx.search(clean_text) for rx in CANCEL_WORDS_RX if rx.search(clean_text)]
+    if cancel_matched:
+        return
+
+    found_words = []
+    
+    # 3. Точні фрази (наприклад: "загроза балістики", "швидкісна ціль")
+    # Точні фрази не блокуються новинами, оскільки це 100% загроза
+    for rx in EXACT_THREATS_RX:
+        match = rx.search(clean_text)
+        if match:
+            found_words.append(match.group(0).strip())
+            
+    # 4. Якщо точних фраз немає, перевіряємо слабшу комбінацію: "дія" + "зброя"
+    if not found_words:
+        # Спочатку перевіряємо, чи це не новини / зведення
+        news_matched = [rx.search(clean_text) for rx in NEWS_WORDS_RX if rx.search(clean_text)]
+        if not news_matched:
+            weapons = [rx.search(clean_text).group(0).strip() for rx in WEAPONS_RX if rx.search(clean_text)]
+            actions = [rx.search(clean_text).group(0).strip() for rx in ACTION_WORDS_RX if rx.search(clean_text)]
+            
+            if weapons and actions:
+                found_words = weapons + actions
+
     if found_words:
         chat_title = message.chat.title
         chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
