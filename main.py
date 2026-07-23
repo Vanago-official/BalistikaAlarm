@@ -15,14 +15,12 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from google import genai
+import aiohttp
 
 import config
 from database import UserManager
 
 logging.basicConfig(level=logging.INFO)
-
-ai_client = genai.Client(api_key=config.GEMINI_API_KEY)
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
@@ -114,7 +112,7 @@ async def handle_channel_message(client: Client, message: Message):
     prompt = f"""Проаналізуй повідомлення з Telegram-каналу, який моніторить повітряні тривоги.
 Твоє завдання — визначити, чи це повідомлення про:
 1) Відбій тривоги ("CLEAR") - якщо пишуть відбій, чисто, дорозвідка, небо чисте тощо.
-2) Пряму небезпеку ракет/балістики ("THREAT") - пряма небезпека балістики або ракет. Наприклад: балістика, швидкісні цілі, пуск ракет, ракети, кинджали, укриття тощо.
+2) Пряму небезпеку балістики / ракет ("THREAT") - Тільки якщо є ПРЯМА загроза балістики. Наприклад: балістика, швидкісні цілі, пуск ракет, ракети, кинджали, укриття тощо.
 3) Інше ("IGNORE") - новини, зведення, результати роботи ППО (знищено/збито), загальна інформація, яка не потребує негайної реакції в укриття.
 
 Повідомлення: "{text}"
@@ -122,13 +120,26 @@ async def handle_channel_message(client: Client, message: Message):
 Відповідай тільки одним словом (CLEAR, THREAT або IGNORE)."""
 
     try:
-        response = await ai_client.aio.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
-        ai_decision = response.text.strip().upper()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "qwen2.5:3b",
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.0
+                    }
+                }
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    ai_decision = data.get("response", "").strip().upper()
+                else:
+                    logging.error(f"Помилка Ollama API: {response.status}")
+                    return
     except Exception as e:
-        logging.error(f"Помилка Gemini: {e}")
+        logging.error(f"Не вдалося підключитися до Ollama: {e}")
         return
 
     logging.info(f"[AI Рішення] {ai_decision}")
