@@ -123,7 +123,7 @@ async def handle_channel_message(client: Client, message: Message):
 
     try:
         response = await ai_client.aio.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            model='gemini-2.5-flash',
             contents=prompt,
         )
         ai_decision = response.text.strip().upper()
