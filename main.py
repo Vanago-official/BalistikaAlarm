@@ -15,14 +15,12 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from google import genai
+import aiohttp
 
 import config
 from database import UserManager
 
 logging.basicConfig(level=logging.INFO)
-
-ai_client = genai.Client(api_key=config.GEMINI_API_KEY)
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
@@ -93,7 +91,7 @@ async def info_action(message: types.Message):
         "ℹ️ <b>Інформація про бота</b>\n\n"
         "Цей бот моніторить канали на наявність повідомлень про швидкісні цілі та балістику.\n\n"
         "• <b>Підписатись</b> — отримувати сповіщення\n"
-        "• <b>Відписатись</b> — повністю перестати отримувати сповіщення\n"
+        "• <b>Відписатись</b> — повністю пета ну рестати отримувати сповіщення\n"
         "• <b>Зам'ютити</b> — тимчасово вимкнути сповіщення (наприклад, якщо ви вже в укритті)\n"
         "• <b>Розм'ютити</b> — увімкнути сповіщення знову\n"
         "• <b>Статус</b> — перевірити, чи увімкнені у вас зараз сповіщення\n\n"
@@ -107,28 +105,74 @@ async def handle_channel_message(client: Client, message: Message):
     text = message.text or message.caption
     if not text:
         return
-    
+        
     chat_title = message.chat.title or "Unknown Chat"
     logging.info(f"[Повідомлення з {chat_title}] {text[:100]}...")
     
-    prompt = f"""Проаналізуй повідомлення з Telegram-каналу, який моніторить повітряні тривоги.
-Твоє завдання — визначити, чи це повідомлення про:
-1) Відбій тривоги ("CLEAR") - якщо пишуть відбій, чисто, дорозвідка, небо чисте тощо.
-2) Пряму небезпеку ("THREAT") - наприклад: балістика, швидкісні цілі, пуск ракет, ракети, шахеди, кинджали, каби, загроза, укриття тощо.
-3) Інше ("IGNORE") - новини, зведення, результати роботи ППО (знищено/збито), загальна інформація, яка не потребує негайної реакції в укриття.
+    clean_text = text.lower()
+    
+    # 1. ЖОРСТКИЙ ФІЛЬТР: якщо це дрони/КАБи або інше місто - одразу ігноруємо
+    ignore_words = ["бпла", "шахед", "дрон", "мопед", "каб", "каби", "харків", "сумщин", "одес", "дніпр", "запоріж", "полтав", "херсон", "миколаїв", "чернігів"]
+    if any(word in clean_text for word in ignore_words) and "київ" not in clean_text:
+        logging.info("[ФІЛЬТР] Пропущено (БпЛА/КАБ або інше місто)")
+        return
+    
+    prompt = f"""Ти — система аналізу повітряних тривог для міста КИЇВ. Твоє завдання — визначити тип повідомлення.
+Відповідай ЗАВЖДИ лише одним словом: CLEAR, THREAT або IGNORE. Жодних інших слів.
+
+Правила:
+- CLEAR: якщо пишуть "відбій", "чисто", "дорозвідка", "небо чисте".
+- THREAT: ТІЛЬКИ якщо є пряма загроза РАКЕТ або БАЛІСТИКИ (ракети, балістика, кинджали, іскандери, швидкісні цілі, пуск, пуски) І ця загроза стосується КИЄВА або є загальною.
+- IGNORE: ігноруй будь-які згадки про шахеди, БпЛА, дрони або КАБи. Ігноруй звичайну "активність авіації" чи "загрозу застосування" БЕЗ інформації про реальний пуск. Ігноруй ракети, якщо чітко вказано, що вони летять в ІНШІ міста (не на Київ). Ігноруй новини та звіти ППО.
+
+Приклади:
+Повідомлення: "Відбій загрози по областях"
+Відповідь: CLEAR
+
+Повідомлення: "Увага! Швидкісна ціль на Київ!"
+Відповідь: THREAT
+
+Повідомлення: "Пуски ракет з тактичної авіації!"
+Відповідь: THREAT
+
+Повідомлення: "Активність ворожої тактичної авіації! Загроза застосування авіаційних засобів ураження!"
+Відповідь: IGNORE
+
+Повідомлення: "Шахеди летять на Київ"
+Відповідь: IGNORE
+
+Повідомлення: "Ракета на Харків"
+Відповідь: IGNORE
+
+Повідомлення: "КАБи на Сумщину"
+Відповідь: IGNORE
 
 Повідомлення: "{text}"
-
-Відповідай тільки одним словом (CLEAR, THREAT або IGNORE)."""
+Відповідь:"""
 
     try:
-        response = await ai_client.aio.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
-        ai_decision = response.text.strip().upper()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {getattr(config, 'GROQ_API_KEY', '')}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0
+                }
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    ai_decision = data["choices"][0]["message"]["content"].strip().upper()
+                else:
+                    error_text = await response.text()
+                    logging.error(f"Помилка Groq API: {response.status} - Деталі: {error_text}")
+                    return
     except Exception as e:
-        logging.error(f"Помилка Cloud API: {e}")
+        logging.error(f"Не вдалося підключитися до Groq API: {e}")
         return
 
     logging.info(f"[AI Рішення] {ai_decision}")
