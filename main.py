@@ -136,7 +136,8 @@ async def handle_channel_message(client: Client, message: Message):
                     data = await response.json()
                     ai_decision = data.get("response", "").strip().upper()
                 else:
-                    logging.error(f"Помилка Ollama API: {response.status}")
+                    error_text = await response.text()
+                    logging.error(f"Помилка Ollama API: {response.status} - Деталі: {error_text}")
                     return
     except Exception as e:
         logging.error(f"Не вдалося підключитися до Ollama: {e}")
