@@ -15,18 +15,14 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from google import genai
 
 import config
 from database import UserManager
 
 logging.basicConfig(level=logging.INFO)
 
-EXACT_THREATS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'EXACT_THREATS', [])]
-WEAPONS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'WEAPONS', [])]
-ACTION_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'ACTION_WORDS', [])]
-CANCEL_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'CANCEL_WORDS', [])]
-NEWS_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'NEWS_WORDS', [])]
-CLEAR_WORDS_RX = [re.compile(p, re.IGNORECASE) for p in getattr(config, 'CLEAR_WORDS', [])]
+ai_client = genai.Client(api_key=config.GEMINI_API_KEY)
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
@@ -113,57 +109,44 @@ async def handle_channel_message(client: Client, message: Message):
         return
     
     chat_title = message.chat.title or "Unknown Chat"
-    # Щоб не спамити повними текстами, виводимо перші 100 символів
     logging.info(f"[Повідомлення з {chat_title}] {text[:100]}...")
     
-    clean_text = text.lower()
-    # Замінюємо пунктуацію на пробіли (крім апострофів), щоб уникнути злипання слів
-    clean_text = re.sub(r"[^\w\s']", ' ', clean_text)
-    
-    # 1. Відбій
-    clear_matched = [rx.search(clean_text) for rx in CLEAR_WORDS_RX if rx.search(clean_text)]
-    if clear_matched:
+    prompt = f"""Проаналізуй повідомлення з Telegram-каналу, який моніторить повітряні тривоги.
+Твоє завдання — визначити, чи це повідомлення про:
+1) Відбій тривоги ("CLEAR") - якщо пишуть відбій, чисто, дорозвідка, небо чисте тощо.
+2) Пряму небезпеку ракет/балістики ("THREAT") - пряма небезпека балістики або ракет. Наприклад: балістика, швидкісні цілі, пуск ракет, ракети, кинджали, укриття тощо.
+3) Інше ("IGNORE") - новини, зведення, результати роботи ППО (знищено/збито), загальна інформація, яка не потребує негайної реакції в укриття.
+
+Повідомлення: "{text}"
+
+Відповідай тільки одним словом (CLEAR, THREAT або IGNORE)."""
+
+    try:
+        response = await ai_client.aio.models.generate_content(
+            model='gemini-2.5-flash-lite',
+            contents=prompt,
+        )
+        ai_decision = response.text.strip().upper()
+    except Exception as e:
+        logging.error(f"Помилка Gemini: {e}")
+        return
+
+    logging.info(f"[AI Рішення] {ai_decision}")
+
+    if "CLEAR" in ai_decision:
         unmuted_ids = user_manager.unmute_all_users()
         for uid in unmuted_ids:
             try:
                 await bot.send_message(chat_id=uid, text="Чисто. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
             except Exception as e:
                 logging.error(e)
-        return  # Зупиняємось, відбій оброблено
-        
-    # 2. Слова, що повністю скасовують тривогу (звіти, збиття)
-    cancel_matched = [rx.search(clean_text) for rx in CANCEL_WORDS_RX if rx.search(clean_text)]
-    if cancel_matched:
         return
 
-    found_words = []
-    
-    # 3. Точні фрази (наприклад: "загроза балістики", "швидкісна ціль")
-    # Точні фрази не блокуються новинами, оскільки це 100% загроза
-    for rx in EXACT_THREATS_RX:
-        match = rx.search(clean_text)
-        if match:
-            found_words.append(match.group(0).strip())
-            
-    # 4. Якщо точних фраз немає, перевіряємо слабшу комбінацію: "дія" + "зброя"
-    if not found_words:
-        # Спочатку перевіряємо, чи це не новини / зведення
-        news_matched = [rx.search(clean_text) for rx in NEWS_WORDS_RX if rx.search(clean_text)]
-        if not news_matched:
-            weapons = [rx.search(clean_text).group(0).strip() for rx in WEAPONS_RX if rx.search(clean_text)]
-            actions = [rx.search(clean_text).group(0).strip() for rx in ACTION_WORDS_RX if rx.search(clean_text)]
-            
-            if weapons and actions:
-                found_words = weapons + actions
-
-    if found_words:
-        chat_title = message.chat.title
+    elif "THREAT" in ai_decision:
         chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
-        
-        words_str = ", ".join(found_words)
         full_text = message.text or message.caption or ""
         
-        alert_text = f"WARNING: {words_str}\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
+        alert_text = f"🚨 УВАГА!\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
         
         print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
         
