@@ -33,6 +33,40 @@ app = Client(
 
 user_manager = UserManager()
 
+KYIV_ALARM_ACTIVE = False
+
+async def get_alert_status():
+    global KYIV_ALARM_ACTIVE
+    
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(config.ALERT_STATUS_SOURCE, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        # Отримуємо статус для Києва (ключ "м. Київ")
+                        is_active = data.get("states", {}).get("м. Київ", {}).get("alertnow", False)
+                        
+                        # Якщо тривога БУЛА активна, а тепер НІ - робимо відбій
+                        if KYIV_ALARM_ACTIVE and not is_active:
+                            logging.info("API: Відбій тривоги в м. Київ. Автоматичний CLEAR.")
+                            unmuted_ids = user_manager.unmute_all_users()
+                            for uid in unmuted_ids:
+                                try:
+                                    await bot.send_message(
+                                        chat_id=uid, 
+                                        text="🟢 Відбій тривоги в Києві! Ви знову отримуватимете сповіщення про нові загрози.", 
+                                        reply_markup=get_keyboard()
+                                    )
+                                except Exception as e:
+                                    logging.error(f"Не вдалося відправити відбій {uid}: {e}")
+                        
+                        KYIV_ALARM_ACTIVE = is_active
+        except Exception as e:
+            logging.error(f"Помилка при перевірці API тривог: {e}")
+            
+        await asyncio.sleep(60) # Пауза 20 секунд перед наступним запитом
+
 def get_keyboard():
     kb = [
         [KeyboardButton(text="Підписатись"), KeyboardButton(text="Відписатись")],
@@ -89,7 +123,7 @@ async def status_action(message: types.Message):
 async def info_action(message: types.Message):
     info_text = (
         "ℹ️ <b>Інформація про бота</b>\n\n"
-        "Цей бот моніторить канали на наявність повідомлень про швидкісні цілі та балістику.\n\n"
+        "Цей бот моніторить канали на наявність повідомлень про швидкісні цілі та балістику.\nЗроблено @vanago_official як pet-проєкт.\n\n"
         "• <b>Підписатись</b> — отримувати сповіщення\n"
         "• <b>Відписатись</b> — повністю пета ну рестати отримувати сповіщення\n"
         "• <b>Зам'ютити</b> — тимчасово вимкнути сповіщення (наприклад, якщо ви вже в укритті)\n"
@@ -102,6 +136,12 @@ async def info_action(message: types.Message):
 @app.on_message(filters.chat(config.CHANNELS_TO_MONITOR))
 @app.on_edited_message(filters.chat(config.CHANNELS_TO_MONITOR))
 async def handle_channel_message(client: Client, message: Message):
+    global KYIV_ALARM_ACTIVE
+    
+    # Якщо тривоги немає - ігноруємо всі повідомлення
+    if not KYIV_ALARM_ACTIVE:
+        return
+        
     text = message.text or message.caption
     if not text:
         return
@@ -111,43 +151,33 @@ async def handle_channel_message(client: Client, message: Message):
     
     clean_text = text.lower()
     
-    # 1. ЖОРСТКИЙ ФІЛЬТР: якщо це дрони/КАБи або інше місто - одразу ігноруємо
-    ignore_words = ["бпла", "шахед", "дрон", "мопед", "каб", "каби", "харків", "сумщин", "одес", "дніпр", "запоріж", "полтав", "херсон", "миколаїв", "чернігів"]
-    if any(word in clean_text for word in ignore_words) and "київ" not in clean_text:
-        logging.info("[ФІЛЬТР] Пропущено (БпЛА/КАБ або інше місто)")
-        return
-    
-    prompt = f"""Ти — система аналізу повітряних тривог для міста КИЇВ. Твоє завдання — визначити тип повідомлення.
-Відповідай ЗАВЖДИ лише одним словом: CLEAR, THREAT або IGNORE. Жодних інших слів.
+    prompt = f"""Ти — військовий аналітик ППО. Твоя мета: виявити ПРЯМУ ракетну чи балістичну загрозу саме для міста КИЇВ.
+Проаналізуй повідомлення і відповідай СУВОРО одним словом: THREAT або IGNORE.
 
-Правила:
-- CLEAR: якщо пишуть "відбій", "чисто", "дорозвідка", "небо чисте".
-- THREAT: ТІЛЬКИ якщо є пряма загроза РАКЕТ або БАЛІСТИКИ (ракети, балістика, кинджали, іскандери, швидкісні цілі, пуск, пуски) І ця загроза стосується КИЄВА або є загальною.
-- IGNORE: ігноруй будь-які згадки про шахеди, БпЛА, дрони або КАБи. Ігноруй попередження типу "загроза застосування балістичного озброєння" чи "активність авіації", якщо НЕМАЄ інформації про реальний пуск. Ігноруй ракети, якщо чітко вказано, що вони летять в ІНШІ міста (не на Київ). Ігноруй новини та звіти ППО.
+Правила для THREAT:
+1. Є згадка про ракети, балістику, кинджали, іскандери, Х-101, калібри, фальш-цілі або швидкісні цілі.
+2. Ці цілі летять НА Київ, В НАПРЯМКУ Києва, або це загальна загроза пусків (наприклад "Пуски ракет з Ту-95" чи "Пуски балістики" - загроза для всіх, отже для Києва теж).
+
+Правила для IGNORE:
+1. Повідомлення про БпЛА, Шахеди, Мопеди, КАБи, розвідувальні дрони (навіть якщо вони летять на Київ).
+2. Загроза чітко стосується ІНШИХ міст/регіонів і оминає Київ ("ракета на Харків", "балістика повз Київ на Житомир").
+3. Злітає авіація (МіГ-31К, Ту-95), але пусків ще немає ("Активність тактичної авіації", "Зліт МіГа").
+4. Новини, зведення роботи ППО, наслідки вибухів.
 
 Приклади:
-Повідомлення: "Відбій загрози по областях"
-Відповідь: CLEAR
-
 Повідомлення: "Увага! Швидкісна ціль на Київ!"
 Відповідь: THREAT
 
-Повідомлення: "Пуски ракет з тактичної авіації!"
+Повідомлення: "Пуски крилатих ракет!"
 Відповідь: THREAT
 
-Повідомлення: "Загроза застосування балістичного озброєння з півдня!"
+Повідомлення: "Ракета повз Київ курсом на захід"
 Відповідь: IGNORE
 
-Повідомлення: "Активність ворожої тактичної авіації! Загроза застосування авіаційних засобів ураження!"
+Повідомлення: "Шахеди наближаються до Києва"
 Відповідь: IGNORE
 
-Повідомлення: "Шахеди летять на Київ"
-Відповідь: IGNORE
-
-Повідомлення: "Ракета на Харків"
-Відповідь: IGNORE
-
-Повідомлення: "КАБи на Сумщину"
+Повідомлення: "Зліт МіГ-31К з аеродрому Саваслейка"
 Відповідь: IGNORE
 
 Повідомлення: "{text}"
@@ -180,16 +210,7 @@ async def handle_channel_message(client: Client, message: Message):
 
     logging.info(f"[AI Рішення] {ai_decision}")
 
-    if "CLEAR" in ai_decision:
-        unmuted_ids = user_manager.unmute_all_users()
-        for uid in unmuted_ids:
-            try:
-                await bot.send_message(chat_id=uid, text="Чисто. Ви знову отримуватимете сповіщення про нові загрози.", reply_markup=get_keyboard())
-            except Exception as e:
-                logging.error(e)
-        return
-
-    elif "THREAT" in ai_decision:
+    if "THREAT" in ai_decision:
         chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
         full_text = message.text or message.caption or ""
         
@@ -211,6 +232,9 @@ async def handle_channel_message(client: Client, message: Message):
             user_manager.save()
 
 async def main():
+    # Запускаємо фонове опитування API тривог
+    asyncio.create_task(get_alert_status())
+    
     await app.start()
     try:
         await dp.start_polling(bot)

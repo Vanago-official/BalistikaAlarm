@@ -9,3 +9,4 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 CHANNELS_TO_MONITOR = [-1004298960926, -1001223955273] # "tviy_kyiv", "kiev1", -1003740116044
+ALERT_STATUS_SOURCE = "https://ubilling.net.ua/aerialalerts/"
