@@ -179,10 +179,10 @@ async def main():
                 logging.info(f"[ALERT] {CITY}")
                 
                 # Check recent messages buffer
-                users = await get_active_users()
                 for msg in recent_messages:
                     ai_response = await analyze_message(msg["text"])
                     if ai_response == "THREAT":
+                        users = await get_active_users()
                         await set_all_mutes(1)
                         for user_id in users:
                             try:
