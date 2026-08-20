@@ -16,8 +16,13 @@ async def init_db():
 
 
 async def add_user(user_id):
-    logging.info(f"[DATABASE] new user - {user_id}.")
     async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT user_id FROM users WHERE users_id = ?", (user_id,))
+        row = await cursor.fetchone()
+
+        if row is None:
+            return row
+        logging.info(f"[DATABASE] new user - {user_id}.")
         await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
         await db.commit()
 

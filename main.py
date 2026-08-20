@@ -57,11 +57,11 @@ async def start_command(client, message):
             [KeyboardButton("Status")],
             [KeyboardButton("Info")],
         ],
-        resize_keyboard=False
+        resize_keyboard=True
     )
 
     await message.reply_text(
-        "Привіт! Я бот, який дозволяє моніторити прямі загрози балістики/ракет для м. Київ.",
+        "Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.",
         reply_markup=menu
     )
 
