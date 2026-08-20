@@ -1,6 +1,6 @@
 import os
 import configparser
-from main import load_dotenv
+from dotenv import load_dotenv
 from groq import AsyncGroq
 
 config = configparser.ConfigParser()
