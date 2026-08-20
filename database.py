@@ -15,7 +15,7 @@ async def init_db():
 
 
 async def add_user(user_id):
-    print(f"[DATABASE] new user - {message.chat.id}.")
+    print(f"[DATABASE] new user - {user_id}.")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
         await db.commit()
