@@ -17,7 +17,7 @@ async def init_db():
 
 async def add_user(user_id):
     async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute("SELECT user_id FROM users WHERE users_id = ?", (user_id,))
+        cursor = await db.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
         row = await cursor.fetchone()
 
         if row is None:
