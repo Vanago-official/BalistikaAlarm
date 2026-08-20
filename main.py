@@ -100,28 +100,28 @@ async def monitor_channels(client, message):
                 pass
 
 # MENU BUTTONS
-@app.on_message(filters.text & filters.regex("Activate"))
+@app.on_message(filters.text & filters.regex("^Activate$"))
 async def active_button(client, message):
     await set_user_active(message.chat.id, 1)
     await set_user_mute(message.chat.id, 0)
     await message.reply_text("Bot activated. You will receive threat alerts.")
     
-@app.on_message(filters.text & filters.regex("Deactivate"))
+@app.on_message(filters.text & filters.regex("^Deactivate$"))
 async def deactivate_button(client, message):
     await set_user_active(message.chat.id, 0)
     await message.reply_text("Bot deactivated. You will not receive any alerts.")
 
-@app.on_message(filters.text & filters.regex("Mute"))
+@app.on_message(filters.text & filters.regex("^Mute$"))
 async def mute_button(client, message):
     await set_user_mute(message.chat.id, 1)
     await message.reply_text("Alerts muted. You will not receive notifications until the all-clear signal.")
 
-@app.on_message(filters.text & filters.regex("Unmute"))
+@app.on_message(filters.text & filters.regex("^Unmute$"))
 async def unmute_button(client, message):
     await set_user_mute(message.chat.id, 0)
     await message.reply_text("Alerts unmuted. You will receive all notifications.")
 
-@app.on_message(filters.text & filters.regex("Status"))
+@app.on_message(filters.text & filters.regex("^Status$"))
 async def status_button(client, message):
     info = await get_user_info(message.chat.id)
 
@@ -131,7 +131,7 @@ async def status_button(client, message):
 
     await message.reply_text(f"Your status:\nActive: {'+' if info[0] else '-'}\nMuted: {'+' if info[1] else '-'}")
 
-@app.on_message(filters.text & filters.regex("Info"))
+@app.on_message(filters.text & filters.regex("^Info$"))
 async def info_button(client, message):
     info_text = (
         "This bot was created as a pet project by @vanago_official.\n\n"

@@ -8,12 +8,16 @@ ALERT_API = config["Settings"]["ALERT_API"]
 CITY = config["Settings"]["CITY"]
 
 async def get_alert():
-    async with httpx.AsyncClient() as client:
-        response = await client.get(ALERT_API)
-        data = response.json()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(ALERT_API)
+            data = response.json()
 
-        if data["states"][CITY]["alertnow"]:
-            return True
-        
+            if data["states"][CITY]["alertnow"]:
+                return True
+            
+            return False
+    except Exception as e:
+        print(f"[API ERROR] Не вдалося перевірити тривогу: {e}")
         return False
 
