@@ -20,10 +20,10 @@ async def add_user(user_id):
         cursor = await db.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
         row = await cursor.fetchone()
 
-        if row is None:
+        if row is not None:
             return row
         logging.info(f"[DATABASE] new user - {user_id}.")
-        await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+        await db.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
         await db.commit()
 
 
