@@ -5,6 +5,7 @@ logging.basicConfig(
 )
 import os
 import asyncio
+from collections import deque
 
 try:
     asyncio.get_running_loop()
@@ -45,6 +46,7 @@ userbot = Client(
 )
 
 alert_status = False
+recent_messages = deque(maxlen=10)
 
 
 @app.on_message(filters.command("start"))
@@ -70,34 +72,39 @@ async def start_command(client, message):
 @userbot.on_message(filters.chat(CHANNELS))
 async def monitor_channels(client, message):
     global alert_status
-    logging.info(f"[MESSAGE] {source} - {text}")
-    if not alert_status:
-        return
-
-    text = message.text or message.caption
-    if not text:
-        return
-
-    ai_response = await analyze_message(text)
 
     if message.chat.username:
         source = f"@{message.chat.username}"
     else:
         source = message.chat.title
+    
+    text = message.text or message.caption
+    if not text:
+        return
+    
+    logging.info(f"[MESSAGE] {source} - {text}")
 
-    logging.info(f"[MESSAGE] {source} - {text}\n[AI] {ai_response}")
+    if not alert_status:
+        # Save to buffer for later analysis
+        recent_messages.append({"source": source, "text": text})
+        return
+
+    ai_response = await analyze_message(text)
+
+    logging.info(f"[AI] {ai_response}")
 
     if ai_response == "THREAT":
         users = await get_active_users()
         await set_all_mutes(1)
         for user_id in users:
             try:
-
                 await app.send_message(
                     chat_id=user_id,
-                    text=f"{source}\n{text}\n\n__You are muted until the all-clear signal.__",
-                )
+                    text=f"{source}
+{text}
 
+__You are muted until the all-clear signal.__",
+                )
             except Exception as ex:
                 logging.error(f"[ERROR] {ex}")
                 pass
@@ -169,14 +176,36 @@ async def main():
         while True:
             is_alert = await get_alert()
 
+
             if is_alert and not alert_status:
                 alert_status = True
                 logging.info(f"[ALERT] {CITY}")
+                
+                # Check recent messages buffer
+                users = await get_active_users()
+                for msg in recent_messages:
+                    ai_response = await analyze_message(msg["text"])
+                    if ai_response == "THREAT":
+                        await set_all_mutes(1)
+                        for user_id in users:
+                            try:
+                                await app.send_message(
+                                    chat_id=user_id,
+                                    text=f'{msg["source"]}
+{msg["text"]}
+
+__You are muted until the all-clear signal.__',
+                                )
+                            except Exception as ex:
+                                logging.error(f"[ERROR] {ex}")
+                        break # Stop after sending the first threat so we don't spam
+                recent_messages.clear()
 
             elif not is_alert and alert_status:
                 logging.info(f"[no alert] {CITY}")
                 alert_status = False
                 await set_all_mutes(0)
+                recent_messages.clear()
 
             await asyncio.sleep(60)
 
