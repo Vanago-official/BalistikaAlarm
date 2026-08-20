@@ -57,7 +57,7 @@ async def start_command(client, message):
             [KeyboardButton("Status")],
             [KeyboardButton("Info")],
         ],
-        resize_keyboard=True
+        resize_keyboard=False
     )
 
     await message.reply_text(
