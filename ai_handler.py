@@ -8,6 +8,7 @@ config.read("config.cfg")
 
 CITY = config["Settings"]["CITY"]
 
+load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 client = AsyncGroq(api_key=GROQ_API_KEY)
