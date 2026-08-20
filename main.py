@@ -1,248 +1,176 @@
+import os
 import asyncio
 
 try:
-    loop = asyncio.get_running_loop()
+    asyncio.get_running_loop()
 except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
-import logging
-import string
-import re
-from zoneinfo import ZoneInfo
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from dotenv import load_dotenv
 from pyrogram import Client, filters
-from pyrogram.types import Message
-import aiohttp
+from pyrogram.types import ReplyKeyboardMarkup, KeyboardButton
+import configparser
+from alert import get_alert
+from database import *
+from ai_handler import analyze_message
 
-import config
-from database import UserManager
+load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+API_ID = os.getenv("API_ID")
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-bot = Bot(token=config.BOT_TOKEN)
-dp = Dispatcher()
+config = configparser.ConfigParser()
+config.read("config.cfg")
+
+CHANNELS = [x.strip() for x in config["Settings"]["CHANNELS"].split(",")]
+CITY = config["Settings"]["CITY"]
 
 app = Client(
-    "my_account",
-    api_id=config.API_ID,
-    api_hash=config.API_HASH
+    "balistika_alarm_bot",
+    bot_token=BOT_TOKEN,
+    api_id=API_ID,
+    api_hash=API_HASH,
 )
 
-user_manager = UserManager()
+userbot = Client(
+    "@balistika_alarm_session",
+    api_id=API_ID,
+    api_hash=API_HASH,
+)
 
-KYIV_ALARM_ACTIVE = False
+alert_status = False
 
-async def get_alert_status():
-    global KYIV_ALARM_ACTIVE
-    
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(config.ALERT_STATUS_SOURCE, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        # Отримуємо статус для Києва (ключ "м. Київ")
-                        is_active = data.get("states", {}).get("м. Київ", {}).get("alertnow", False)
-                        
-                        # Якщо тривога БУЛА активна, а тепер НІ - робимо відбій
-                        if KYIV_ALARM_ACTIVE and not is_active:
-                            logging.info("API: Відбій тривоги в м. Київ. Автоматичний CLEAR.")
-                            unmuted_ids = user_manager.unmute_all_users()
-                            for uid in unmuted_ids:
-                                try:
-                                    await bot.send_message(
-                                        chat_id=uid, 
-                                        text="🟢 Відбій тривоги в Києві! Ви знову отримуватимете сповіщення про нові загрози.", 
-                                        reply_markup=get_keyboard()
-                                    )
-                                except Exception as e:
-                                    logging.error(f"Не вдалося відправити відбій {uid}: {e}")
-                        
-                        KYIV_ALARM_ACTIVE = is_active
-        except Exception as e:
-            logging.error(f"Помилка при перевірці API тривог: {e}")
-            
-        await asyncio.sleep(60) # Пауза 20 секунд перед наступним запитом
 
-def get_keyboard():
-    kb = [
-        [KeyboardButton(text="Підписатись"), KeyboardButton(text="Відписатись")],
-        [KeyboardButton(text="Розм'ютити"), KeyboardButton(text="Зам'ютити")],
-        [KeyboardButton(text="Статус"), KeyboardButton(text="Інфо")]
-    ]
-    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+@app.on_message(filters.command("start"))
+async def start_command(client, message):
+    await add_user(message.chat.id)
 
-@dp.message(CommandStart())
-async def handle_start(message: types.Message):
-    await message.answer("Головне меню. Оберіть дію на клавіатурі:", reply_markup=get_keyboard())
-
-@dp.message(F.text == "Підписатись")
-async def subscribe_action(message: types.Message):
-    user_manager.add_user(message.from_user.id)
-    logging.info(f"Користувач {message.from_user.id} ПІДПИСАВСЯ.")
-    await message.answer("Ви успішно підписалися на сповіщення!", reply_markup=get_keyboard())
-
-@dp.message(F.text == "Відписатись")
-async def unsubscribe_action(message: types.Message):
-    user_manager.remove_user(message.from_user.id)
-    logging.info(f"Користувач {message.from_user.id} ВІДПИСАВСЯ.")
-    await message.answer("Ви відписалися від сповіщень.", reply_markup=get_keyboard())
-
-@dp.message(F.text == "Розм'ютити")
-async def unmute_action(message: types.Message):
-    success = user_manager.unmute_user(message.from_user.id)
-    if success:
-        logging.info(f"Користувач {message.from_user.id} РОЗМ'ЮТИВСЯ.")
-        await message.answer("Сповіщення відновлено! Ви почуєте про наступну загрозу.", reply_markup=get_keyboard())
-    else:
-        await message.answer("Ви ще не підписані. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
-
-@dp.message(F.text == "Зам'ютити")
-async def mute_action(message: types.Message):
-    success = user_manager.mute_user(message.from_user.id)
-    if success:
-        logging.info(f"Користувач {message.from_user.id} ЗАМ'ЮТИВСЯ.")
-        await message.answer("Сповіщення тимчасово вимкнено. Ви не будете отримувати тривоги, поки не натиснете 'Розм'ютити' або поки не буде відбою.", reply_markup=get_keyboard())
-    else:
-        await message.answer("Ви ще не підписані. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
-
-@dp.message(F.text == "Статус")
-async def status_action(message: types.Message):
-    user = user_manager.get_user(message.from_user.id)
-    if not user:
-        await message.answer("Ви не підписані на сповіщення. Натисніть 'Підписатись'.", reply_markup=get_keyboard())
-    elif user.muted:
-        await message.answer("Ваш статус: ЗАМ'ЮЧЕНО\nВи не будете отримувати тривоги до наступного відбою або поки не натиснете 'Розм'ютити'.", reply_markup=get_keyboard())
-    else:
-        await message.answer("Ваш статус: АКТИВНО\nВи отримуєте всі сповіщення про нові загрози.", reply_markup=get_keyboard())
-
-@dp.message(F.text == "Інфо")
-async def info_action(message: types.Message):
-    info_text = (
-        "ℹ️ <b>Інформація про бота</b>\n\n"
-        "Цей бот моніторить канали на наявність повідомлень про швидкісні цілі та балістику.\nЗроблено @vanago_official як pet-проєкт.\n\n"
-        "• <b>Підписатись</b> — отримувати сповіщення\n"
-        "• <b>Відписатись</b> — повністю пета ну рестати отримувати сповіщення\n"
-        "• <b>Зам'ютити</b> — тимчасово вимкнути сповіщення (наприклад, якщо ви вже в укритті)\n"
-        "• <b>Розм'ютити</b> — увімкнути сповіщення знову\n"
-        "• <b>Статус</b> — перевірити, чи увімкнені у вас зараз сповіщення\n\n"
-        "<i>При надсиланні тривоги бот м'ютить вас автоматично, щоб не спамити. При відбої — розм'ючує.</i>"
+    menu = ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("Activate")],
+            [KeyboardButton("Deactivate")],
+            [KeyboardButton("Mute")],
+            [KeyboardButton("Unmute")],
+            [KeyboardButton("Status")],
+            [KeyboardButton("Info")],
+        ],
+        resize_keyboard=True
     )
-    await message.answer(info_text, parse_mode="HTML", reply_markup=get_keyboard())
 
-@app.on_message(filters.chat(config.CHANNELS_TO_MONITOR))
-@app.on_edited_message(filters.chat(config.CHANNELS_TO_MONITOR))
-async def handle_channel_message(client: Client, message: Message):
-    global KYIV_ALARM_ACTIVE
-    
-    # Якщо тривоги немає - ігноруємо всі повідомлення
-    if not KYIV_ALARM_ACTIVE:
+    await message.reply_text(
+        "Привіт! Я бот, який дозволяє моніторити прямі загрози балістики/ракет для м. Київ.",
+        reply_markup=menu
+    )
+
+# FETCHING MESSAGES
+@userbot.on_message(filters.chat(CHANNELS))
+async def monitor_channels(client, message):
+    global alert_status
+    print(f"[MESSAGE] {source} - {text}")
+    if not alert_status:
         return
-        
+
     text = message.text or message.caption
     if not text:
         return
-        
-    chat_title = message.chat.title or "Unknown Chat"
-    logging.info(f"[Повідомлення з {chat_title}] {text[:100]}...")
+
+    ai_response = await analyze_message(text)
+
+    if message.chat.username:
+        source = f"@{message.chat.username}"
+    else:
+        source = message.chat.title
+
+    print(f"[MESSAGE] {source} - {text}\n[AI] {ai_response}")
+
+    if ai_response == "THREAT":
+        users = await get_active_users()
+        await set_all_mutes(1)
+        for user_id in users:
+            try:
+
+                await app.send_message(
+                    chat_id=user_id,
+                    text=f"{source}\n{text}\n\n__You are muted until the all-clear signal.__",
+                )
+
+            except Exception as ex:
+                print(f"[ERROR] {ex}")
+                pass
+
+# MENU BUTTONS
+@app.on_message(filters.text & filters.regex("Activate"))
+async def active_button(client, message):
+    await set_user_active(message.chat.id, 1)
+    await set_user_mute(message.chat.id, 0)
+    await message.reply_text("Bot activated. You will receive threat alerts.")
     
-    clean_text = text.lower()
-    
-    prompt = f"""Ти — військовий аналітик ППО. Твоя мета: виявити ПРЯМУ ракетну чи балістичну загрозу саме для міста КИЇВ.
-Проаналізуй повідомлення і відповідай СУВОРО одним словом: THREAT або IGNORE.
+@app.on_message(filters.text & filters.regex("Deactivate"))
+async def deactivate_button(client, message):
+    await set_user_active(message.chat.id, 0)
+    await message.reply_text("Bot deactivated. You will not receive any alerts.")
 
-Правила для THREAT:
-1. Є згадка про ракети, балістику, кинджали, іскандери, Х-101, калібри, фальш-цілі або швидкісні цілі.
-2. Ці цілі летять НА Київ, В НАПРЯМКУ Києва, або це загальна загроза пусків (наприклад "Пуски ракет з Ту-95" чи "Пуски балістики" - загроза для всіх, отже для Києва теж).
+@app.on_message(filters.text & filters.regex("Mute"))
+async def mute_button(client, message):
+    await set_user_mute(message.chat.id, 1)
+    await message.reply_text("Alerts muted. You will not receive notifications until the all-clear signal.")
 
-Правила для IGNORE:
-1. Повідомлення про БпЛА, Шахеди, Мопеди, КАБи, розвідувальні дрони (навіть якщо вони летять на Київ).
-2. Загроза чітко стосується ІНШИХ міст/регіонів і оминає Київ ("ракета на Харків", "балістика повз Київ на Житомир").
-3. Злітає авіація (МіГ-31К, Ту-95), але пусків ще немає ("Активність тактичної авіації", "Зліт МіГа").
-4. Новини, зведення роботи ППО, наслідки вибухів.
+@app.on_message(filters.text & filters.regex("Unmute"))
+async def unmute_button(client, message):
+    await set_user_mute(message.chat.id, 0)
+    await message.reply_text("Alerts unmuted. You will receive all notifications.")
 
-Приклади:
-Повідомлення: "Увага! Швидкісна ціль на Київ!"
-Відповідь: THREAT
+@app.on_message(filters.text & filters.regex("Status"))
+async def status_button(client, message):
+    info = await get_user_info(message.chat.id)
 
-Повідомлення: "Пуски крилатих ракет!"
-Відповідь: THREAT
-
-Повідомлення: "Ракета повз Київ курсом на захід"
-Відповідь: IGNORE
-
-Повідомлення: "Шахеди наближаються до Києва"
-Відповідь: IGNORE
-
-Повідомлення: "Зліт МіГ-31К з аеродрому Саваслейка"
-Відповідь: IGNORE
-
-Повідомлення: "{text}"
-Відповідь:"""
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {getattr(config, 'GROQ_API_KEY', '')}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.0
-                }
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    ai_decision = data["choices"][0]["message"]["content"].strip().upper()
-                else:
-                    error_text = await response.text()
-                    logging.error(f"Помилка Groq API: {response.status} - Деталі: {error_text}")
-                    return
-    except Exception as e:
-        logging.error(f"Не вдалося підключитися до Groq API: {e}")
+    if info is None:
+        await message.reply_text("Error: User not found in the database. Please send /start.")
         return
 
-    logging.info(f"[AI Рішення] {ai_decision}")
+    await message.reply_text(f"Your status:\nActive: {'+' if info[0] else '-'}\nMuted: {'+' if info[1] else '-'}")
 
-    if "THREAT" in ai_decision:
-        chat_name = f"@{message.chat.username}" if message.chat.username else chat_title
-        full_text = message.text or message.caption or ""
-        
-        alert_text = f"🚨 УВАГА!\n\n{chat_name} - {full_text}\n\nВас автоматично зам'ючено від спаму. Натисніть «Розм'ютити» на клавіатурі або дочекайтеся відбою."
-        
-        print(f"\n{'-'*30}\n{alert_text}\n{'-'*30}\n")
-        
-        users = user_manager.get_all_users()
-        sent_any = False
-        
-        for user in users:
-            # Метод send_alert сам перевіряє, чи не зам'ючений користувач, і м'ютить після відправки
-            was_sent = await user.send_alert(bot, alert_text)
-            if was_sent:
-                sent_any = True
-                
-        # Зберігаємо базу, якщо хоча б одного користувача було щойно зам'ючено
-        if sent_any:
-            user_manager.save()
+@app.on_message(filters.text & filters.regex("Info"))
+async def info_button(client, message):
+    info_text = (
+        "This bot was created as a pet project by @vanago_official.\n\n"
+        "It monitors radar channels in real-time and uses Artificial Intelligence "
+        "to filter out spam, providing you with immediate alerts ONLY about direct "
+        "ballistic or missile threats to your city."
+    )
+    await message.reply_text(info_text)
 
 async def main():
-    # Запускаємо фонове опитування API тривог
-    asyncio.create_task(get_alert_status())
-    
+    await init_db()
     await app.start()
+    await userbot.start()
+    print("[STATUS] bot is started.")
+
+    global alert_status
+
     try:
-        await dp.start_polling(bot)
+        while True:
+            is_alert = await get_alert()
+
+            if is_alert and not alert_status:
+                alert_status = True
+                print(f"[ALERT] {CITY}")
+
+            elif not is_alert and alert_status:
+                print(f"[no alert] {CITY}")
+                alert_status = False
+                await set_all_mutes(0)
+
+            await asyncio.sleep(60)
+
     finally:
         await app.stop()
-    
+
+
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
-        pass
+        print("\nBot stoped.")
