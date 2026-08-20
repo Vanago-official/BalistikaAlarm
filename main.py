@@ -29,7 +29,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 config = configparser.ConfigParser()
 config.read("config.cfg")
 
-CHANNELS = [x.strip() for x in config["Settings"]["CHANNELS"].split(",")]
+CHANNELS = [int(x.strip()) for x in config["Settings"]["CHANNELS"].split(",")]
 CITY = config["Settings"]["CITY"]
 
 app = Client(
