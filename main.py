@@ -1,5 +1,8 @@
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 import os
 import asyncio
 
@@ -50,20 +53,18 @@ async def start_command(client, message):
 
     menu = ReplyKeyboardMarkup(
         [
-            [KeyboardButton("Activate")],
-            [KeyboardButton("Deactivate")],
-            [KeyboardButton("Mute")],
-            [KeyboardButton("Unmute")],
-            [KeyboardButton("Status")],
-            [KeyboardButton("Info")],
+            [KeyboardButton("Activate"), KeyboardButton("Deactivate")],
+            [KeyboardButton("Mute"), KeyboardButton("Unmute")],
+            [KeyboardButton("Status"), KeyboardButton("Info")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
 
     await message.reply_text(
         "Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.",
-        reply_markup=menu
+        reply_markup=menu,
     )
+
 
 # FETCHING MESSAGES
 @userbot.on_message(filters.chat(CHANNELS))
@@ -101,37 +102,49 @@ async def monitor_channels(client, message):
                 logging.error(f"[ERROR] {ex}")
                 pass
 
+
 # MENU BUTTONS
 @app.on_message(filters.text & filters.regex("^Activate$"))
 async def active_button(client, message):
     await set_user_active(message.chat.id, 1)
     await set_user_mute(message.chat.id, 0)
     await message.reply_text("Bot activated. You will receive threat alerts.")
-    
+
+
 @app.on_message(filters.text & filters.regex("^Deactivate$"))
 async def deactivate_button(client, message):
     await set_user_active(message.chat.id, 0)
     await message.reply_text("Bot deactivated. You will not receive any alerts.")
 
+
 @app.on_message(filters.text & filters.regex("^Mute$"))
 async def mute_button(client, message):
     await set_user_mute(message.chat.id, 1)
-    await message.reply_text("Alerts muted. You will not receive notifications until the all-clear signal.")
+    await message.reply_text(
+        "Alerts muted. You will not receive notifications until the all-clear signal."
+    )
+
 
 @app.on_message(filters.text & filters.regex("^Unmute$"))
 async def unmute_button(client, message):
     await set_user_mute(message.chat.id, 0)
     await message.reply_text("Alerts unmuted. You will receive all notifications.")
 
+
 @app.on_message(filters.text & filters.regex("^Status$"))
 async def status_button(client, message):
     info = await get_user_info(message.chat.id)
 
     if info is None:
-        await message.reply_text("Error: User not found in the database. Please send /start.")
+        await message.reply_text(
+            "Error: User not found in the database. Please send /start."
+        )
         return
 
-    await message.reply_text(f"Your status:\nActive: {'+' if info[0] else '-'}\nMuted: {'+' if info[1] else '-'}")
+    await message.reply_text(
+        f"Your status:\nActive: {'+' if info[0] else '-'}\nMuted: {'+' if info[1] else '-'}"
+    )
+
 
 @app.on_message(filters.text & filters.regex("^Info$"))
 async def info_button(client, message):
@@ -142,6 +155,7 @@ async def info_button(client, message):
         "ballistic or missile threats to your city."
     )
     await message.reply_text(info_text)
+
 
 async def main():
     await init_db()
