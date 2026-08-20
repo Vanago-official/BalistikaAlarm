@@ -100,10 +100,7 @@ async def monitor_channels(client, message):
             try:
                 await app.send_message(
                     chat_id=user_id,
-                    text=f"{source}
-{text}
-
-__You are muted until the all-clear signal.__",
+                    text=f"{source}\\n{text}\\n\\n__You are muted until the all-clear signal.__",
                 )
             except Exception as ex:
                 logging.error(f"[ERROR] {ex}")
@@ -191,10 +188,7 @@ async def main():
                             try:
                                 await app.send_message(
                                     chat_id=user_id,
-                                    text=f'{msg["source"]}
-{msg["text"]}
-
-__You are muted until the all-clear signal.__',
+                                    text=f'{msg["source"]}\\n{msg["text"]}\\n\\n__You are muted until the all-clear signal.__',
                                 )
                             except Exception as ex:
                                 logging.error(f"[ERROR] {ex}")
