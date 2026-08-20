@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 import os
 import asyncio
 
@@ -67,7 +69,7 @@ async def start_command(client, message):
 @userbot.on_message(filters.chat(CHANNELS))
 async def monitor_channels(client, message):
     global alert_status
-    print(f"[MESSAGE] {source} - {text}")
+    logging.info(f"[MESSAGE] {source} - {text}")
     if not alert_status:
         return
 
@@ -82,7 +84,7 @@ async def monitor_channels(client, message):
     else:
         source = message.chat.title
 
-    print(f"[MESSAGE] {source} - {text}\n[AI] {ai_response}")
+    logging.info(f"[MESSAGE] {source} - {text}\n[AI] {ai_response}")
 
     if ai_response == "THREAT":
         users = await get_active_users()
@@ -96,7 +98,7 @@ async def monitor_channels(client, message):
                 )
 
             except Exception as ex:
-                print(f"[ERROR] {ex}")
+                logging.error(f"[ERROR] {ex}")
                 pass
 
 # MENU BUTTONS
@@ -145,7 +147,7 @@ async def main():
     await init_db()
     await app.start()
     await userbot.start()
-    print("[STATUS] bot is started.")
+    logging.info("[STATUS] bot is started.")
 
     global alert_status
 
@@ -155,10 +157,10 @@ async def main():
 
             if is_alert and not alert_status:
                 alert_status = True
-                print(f"[ALERT] {CITY}")
+                logging.info(f"[ALERT] {CITY}")
 
             elif not is_alert and alert_status:
-                print(f"[no alert] {CITY}")
+                logging.info(f"[no alert] {CITY}")
                 alert_status = False
                 await set_all_mutes(0)
 
@@ -173,4 +175,4 @@ if __name__ == "__main__":
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
-        print("\nBot stoped.")
+        logging.info("\nBot stoped.")

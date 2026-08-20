@@ -1,3 +1,4 @@
+import logging
 import aiosqlite
 
 DB_NAME = "bot_database.db"
@@ -15,7 +16,7 @@ async def init_db():
 
 
 async def add_user(user_id):
-    print(f"[DATABASE] new user - {user_id}.")
+    logging.info(f"[DATABASE] new user - {user_id}.")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
         await db.commit()
@@ -31,28 +32,28 @@ async def get_active_users():
 
 
 async def set_all_mutes(flag):
-    print(f"[DATABASE] all is_muted changed to {flag}.")
+    logging.info(f"[DATABASE] all is_muted changed to {flag}.")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("UPDATE users SET is_muted = ?", (flag,))
         await db.commit()
 
 
 async def set_user_mute(id, flag):
-    print(f"[DATABASE] user {id} is_muted changed to {flag}")
+    logging.info(f"[DATABASE] user {id} is_muted changed to {flag}")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(f"UPDATE users SET is_muted = ? WHERE user_id = ?", (flag, id))
         await db.commit()
 
 
 async def set_user_active(id, flag):
-    print(f"[DATABASE] user {id} active changed to {flag}")
+    logging.info(f"[DATABASE] user {id} active changed to {flag}")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(f"UPDATE users SET active = ? WHERE user_id = ?", (flag, id))
         await db.commit()
 
 
 async def get_user_info(id):
-    print(f"[DATABASE] user get info {id}")
+    logging.info(f"[DATABASE] user get info {id}")
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute(
             f"SELECT active, is_muted FROM users WHERE user_id = ?", (id,)

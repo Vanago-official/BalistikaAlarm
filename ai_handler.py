@@ -1,3 +1,4 @@
+import logging
 import os
 import configparser
 from dotenv import load_dotenv
@@ -54,5 +55,5 @@ async def analyze_message(text):
         return chat_completion.choices[0].message.content.strip()
             
     except Exception as e:
-        print(f"[AI ERROR] {e}")
+        logging.error(f"[AI ERROR] {e}")
         return "IGNORE"
