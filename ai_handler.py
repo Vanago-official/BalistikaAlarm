@@ -1,13 +1,11 @@
 import os
 import httpx
 import logging
+import configparser
 from dotenv import load_dotenv
 
 load_dotenv()
-
-AI_KEY = os.getenv("AI_KEY") 
-
-import configparser
+AI_KEY = os.getenv("AI_KEY")
 
 config = configparser.ConfigParser()
 config.read("config.cfg")
@@ -40,32 +38,36 @@ SYSTEM_PROMPT = f"""Ти військовий аналітик. Твоя єди�
 Відповідь: IGNORE"""
 
 async def analyze_message(text: str) -> str:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/antigravity-preview-05-2026:generateContent?key={API_KEY}"
+    
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
     
     payload = {
-        "model": "google/gemini-3.1-flash-lite",
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text}
-        ],
-        "temperature": 0.0
+        "systemInstruction": {
+            "parts": [{"text": SYSTEM_PROMPT}]
+        },
+        "contents": [{
+            "parts": [{"text": text}]
+        }],
+        "generationConfig": {
+            "temperature": 0.0
+        }
     }
     
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=payload
-            )
+            response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
             
-            return data["choices"][0]["message"]["content"].strip()
+            # Дістаємо текст відповіді зі специфічної структури Gemini
+            answer = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return answer
             
         except Exception as e:
-            logging.error(f"[AI ERROR] OpenRouter API Error: {e}")
+            logging.error(f"[AI ERROR] Gemini API Error: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                 logging.error(f"Response data: {e.response.text}")
             return "IGNORE"

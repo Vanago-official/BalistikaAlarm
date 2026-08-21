@@ -181,7 +181,7 @@ async def main():
             is_alert = await get_alert()
 
 
-            if is_alert and not alert_status:
+            if is_alert and not alert_status or True:
                 alert_status = True
                 logging.info(f"[ALERT] {CITY}")
                 
