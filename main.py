@@ -47,6 +47,8 @@ userbot = Client(
 
 alert_status = False
 recent_messages = deque(maxlen=10)
+city_threat_active = False
+radar_history = deque(maxlen=7)
 
 
 @app.on_message(filters.command("start"))
@@ -78,7 +80,7 @@ async def debug_monitor(client, message):
 # FETCHING MESSAGES
 @userbot.on_message(filters.chat(CHANNELS))
 async def monitor_channels(client, message):
-    global alert_status
+    global alert_status, city_threat_active, radar_history
 
     if message.chat.username:
         source = f"@{message.chat.username}"
@@ -88,7 +90,7 @@ async def monitor_channels(client, message):
     text = message.text or message.caption
     if not text:
         return
-    
+
     logging.info(f"[MESSAGE] {source} - {text}")
 
     if not alert_status:
@@ -96,22 +98,27 @@ async def monitor_channels(client, message):
         recent_messages.append({"source": source, "text": text})
         return
 
-    ai_response = await analyze_message(text)
+    radar_history.append(text)
+    ai_response = await analyze_message(text, list(radar_history), city_threat_active)
 
     logging.info(f"[AI] {ai_response}")
 
     if ai_response == "THREAT":
+        city_threat_active = True
         users = await get_active_users()
         await set_all_mutes(1)
         for user_id in users:
             try:
+                formatted_message = f"🚨 {source}: {text}"
                 await app.send_message(
                     chat_id=user_id,
-                    text=f"{source}\\n{text}\\n\\n__You are muted until the all-clear signal.__",
+                    text=formatted_message,
+                    reply_markup=status_keyboard()
                 )
             except Exception as ex:
                 logging.error(f"[ERROR] {ex}")
-                pass
+    elif ai_response == "CLEAR":
+        city_threat_active = False
 
 
 # MENU BUTTONS
@@ -187,33 +194,40 @@ async def main():
         while True:
             is_alert = await get_alert()
 
-
-            if is_alert and not alert_status or True:
+            if is_alert and not alert_status:
                 alert_status = True
+                city_threat_active = False
                 logging.info(f"[ALERT] {CITY}")
                 
                 # Check recent messages buffer
                 for msg in recent_messages:
-                    ai_response = await analyze_message(msg["text"])
+                    radar_history.append(msg["text"])
+                    ai_response = await analyze_message(msg["text"], list(radar_history), city_threat_active)
                     if ai_response == "THREAT":
+                        city_threat_active = True
                         users = await get_active_users()
                         await set_all_mutes(1)
                         for user_id in users:
                             try:
+                                formatted_message = f"🚨 {msg['source']}: {msg['text']}"
                                 await app.send_message(
                                     chat_id=user_id,
-                                    text=f'{msg["source"]}\\n{msg["text"]}\\n\\n__You are muted until the all-clear signal.__',
+                                    text=formatted_message,
+                                    reply_markup=status_keyboard()
                                 )
                             except Exception as ex:
                                 logging.error(f"[ERROR] {ex}")
-                        break # Stop after sending the first threat so we don't spam
+                    elif ai_response == "CLEAR":
+                        city_threat_active = False
                 recent_messages.clear()
 
             elif not is_alert and alert_status:
-                logging.info(f"[no alert] {CITY}")
+                logging.info(f"[ALERT END] {CITY}")
                 alert_status = False
+                city_threat_active = False
                 await set_all_mutes(0)
                 recent_messages.clear()
+                radar_history.clear()
 
             await asyncio.sleep(60)
 
