@@ -68,6 +68,13 @@ async def start_command(client, message):
     )
 
 
+
+# DEBUG HANDLER
+@userbot.on_message(~filters.chat(CHANNELS) & filters.channel, group=-1)
+async def debug_monitor(client, message):
+    logging.info(f"[DEBUG] Message from non-target channel: {message.chat.title} (ID: {message.chat.id})")
+
+
 # FETCHING MESSAGES
 @userbot.on_message(filters.chat(CHANNELS))
 async def monitor_channels(client, message):

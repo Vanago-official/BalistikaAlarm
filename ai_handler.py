@@ -38,7 +38,7 @@ SYSTEM_PROMPT = f"""Ти військовий аналітик. Твоя єди�
 Відповідь: IGNORE"""
 
 async def analyze_message(text: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/antigravity-preview-05-2026:generateContent?key={API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={AI_KEY}"
     
     headers = {
         "Content-Type": "application/json"
