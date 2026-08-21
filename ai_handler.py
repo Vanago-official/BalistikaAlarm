@@ -48,7 +48,7 @@ async def analyze_message(text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            model="llama-3.1-8b-instant", 
+            model="openai/gpt-oss-20b", 
             temperature=0,
             max_tokens=10
             )
