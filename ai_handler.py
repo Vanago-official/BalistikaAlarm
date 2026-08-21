@@ -48,8 +48,9 @@ async def analyze_message(text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            model="llama3-70b-8192", 
-            temperature=0.0, # Ставимо 0, щоб модель працювала як жорсткий алгоритм, без креативності
+            model="llama-3.3-70b-versatile", 
+            temperature=0,
+            max_tokens=10
             )
             
         return chat_completion.choices[0].message.content.strip()
