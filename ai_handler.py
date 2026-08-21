@@ -48,7 +48,7 @@ async def analyze_message(text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            model="qwen/qwen3.6-27b", 
+            model="llama-3.1-8b-instant", 
             temperature=0,
             max_tokens=10
             )
