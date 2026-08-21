@@ -165,7 +165,14 @@ async def main():
     await init_db()
     await app.start()
     await userbot.start()
-    logging.info("[STATUS] bot is started.")
+    logging.info("[STATUS] bot is started. Caching dialogs...")
+    try:
+        # Примусово провантажуємо всі чати в кеш Pyrogram
+        async for _ in userbot.get_dialogs():
+            pass
+        logging.info("[STATUS] Dialogs cached successfully.")
+    except Exception as e:
+        logging.warning(f"[STATUS] Could not cache dialogs: {e}")
 
     global alert_status
 
