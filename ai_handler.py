@@ -10,9 +10,9 @@ config.read("config.cfg")
 CITY = config["Settings"]["CITY"]
 
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+AI_KEY = os.getenv("AI_KEY")
 
-client = AsyncGroq(api_key=GROQ_API_KEY)
+client = AsyncGroq(api_key=AI_KEY)
 
 async def analyze_message(text):
     system_prompt = """Ти військовий аналітик. Твоя єдина задача — аналізувати вхідні повідомлення з радарів і визначати, чи існує ПРЯМА загроза балістики, крилатих ракет (Х-101, Кинджал, тощо) для    
@@ -48,7 +48,7 @@ async def analyze_message(text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            model="openai/gpt-oss-20b", 
+            model="qwen/qwen3.6-27b", 
             temperature=0,
             max_tokens=10
             )
