@@ -48,7 +48,7 @@ async def analyze_message(text):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            model="llama-3.3-70b-versatile", 
+            model="llama3-8b-8192", 
             temperature=0,
             max_tokens=10
             )
