@@ -219,7 +219,7 @@ async def main():
         while True:
             is_alert = await get_alert()
 
-            if is_alert and not alert_status or True:
+            if is_alert and not alert_status:
                 alert_status = True
                 city_threat_active = False
                 logging.info(f"[ALERT] {CITY}")
