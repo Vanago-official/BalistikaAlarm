@@ -107,7 +107,7 @@ async def monitor_channels(client, message):
         await set_all_mutes(1)
         for user_id in users:
             try:
-                formatted_message = f"{source}: {text}\n\n__You are automatically muted until the alert is over.__"
+                formatted_message = f"{source}: {text}\n\n__🔕 Alerts muted. You will not receive notifications until the all-clear signal.__"
                 await app.send_message(
                     chat_id=user_id,
                     text=formatted_message,
@@ -169,9 +169,9 @@ async def status_button(client, message):
 @app.on_message(filters.text & filters.regex("^ℹ️ Info$"))
 async def info_button(client, message):
     info_text = (
-        "This bot was created as a pet project by @vanago_official.\n"
-        "It monitors radar channels in real-time and uses Artificial Intelligence\n"
-        "to filter out spam, providing you with immediate alerts ONLY about direct\n"
+        "This bot was created as a pet project by @vanago_official. "
+        "It monitors radar channels in real-time and uses Artificial Intelligence "
+        "to filter out spam, providing you with immediate alerts ONLY about direct "
         "ballistic or missile threats to your city."
     )
     await message.reply_text(info_text)
