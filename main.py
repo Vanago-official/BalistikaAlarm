@@ -67,7 +67,7 @@ async def start_command(client, message):
     await add_user(message.chat.id)
 
     await message.reply_text(
-        "Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.",
+        "👋 Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.\n\n👇 Use the buttons below to control the bot:",
         reply_markup=status_keyboard(),
     )
 
@@ -124,27 +124,27 @@ async def monitor_channels(client, message):
 async def active_button(client, message):
     await set_user_active(message.chat.id, 1)
     await set_user_mute(message.chat.id, 0)
-    await message.reply_text("Bot activated. You will receive threat alerts.")
+    await message.reply_text("✅ Bot activated. You will now receive threat alerts.")
 
 
 @app.on_message(filters.text & filters.regex("^🛑 Deactivate$"))
 async def deactivate_button(client, message):
     await set_user_active(message.chat.id, 0)
-    await message.reply_text("Bot deactivated. You will not receive any alerts.")
+    await message.reply_text("🛑 Bot deactivated. You will no longer receive any alerts.")
 
 
 @app.on_message(filters.text & filters.regex("^🔕 Mute$"))
 async def mute_button(client, message):
     await set_user_mute(message.chat.id, 1)
     await message.reply_text(
-        "Alerts muted. You will not receive notifications until the all-clear signal."
+        "🔕 Alerts muted. You will not receive notifications until the all-clear signal."
     )
 
 
 @app.on_message(filters.text & filters.regex("^🔔 Unmute$"))
 async def unmute_button(client, message):
     await set_user_mute(message.chat.id, 0)
-    await message.reply_text("Alerts unmuted. You will receive all notifications.")
+    await message.reply_text("🔔 Alerts unmuted. You will receive all notifications.")
 
 
 @app.on_message(filters.text & filters.regex("^📊 Status$"))
@@ -160,18 +160,18 @@ async def status_button(client, message):
     await message.reply_text(
         f"📊 **Current Status:**\n\n"
         f"🚨 **Air Alert:** {'🔴 Active' if alert_status else '🟢 Inactive'}\n"
-        f"🎯 **City Threat:** {'🔴 Active' if city_threat_active else '🟢 Inactive'}\n"
-        f"🔕 **Muted:** {'Yes' if info[1] else 'No'}\n"
-        f"✅ **Subscribed:** {'Yes' if info[0] else 'No'}"
+        f"🎯 **City Threat:** {'🔴 Active' if city_threat_active else '🟢 Inactive'}\n\n"
+        f"✅ **Activated:** {'Yes' if info[0] else 'No'}\n"
+        f"🔕 **Muted:** {'Yes' if info[1] else 'No'}"
     )
 
 
 @app.on_message(filters.text & filters.regex("^ℹ️ Info$"))
 async def info_button(client, message):
     info_text = (
-        "This bot was created as a pet project by @vanago_official."
-        "It monitors radar channels in real-time and uses Artificial Intelligence "
-        "to filter out spam, providing you with immediate alerts ONLY about direct "
+        "This bot was created as a pet project by @vanago_official.\n"
+        "It monitors radar channels in real-time and uses Artificial Intelligence\n"
+        "to filter out spam, providing you with immediate alerts ONLY about direct\n"
         "ballistic or missile threats to your city."
     )
     await message.reply_text(info_text)
