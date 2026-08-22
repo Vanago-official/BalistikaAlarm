@@ -46,16 +46,14 @@ userbot = Client(
 )
 
 alert_status = False
-recent_messages = deque(maxlen=10)
+message_history = deque(maxlen=10)
 city_threat_active = False
-radar_history = deque(maxlen=7)
+processed_msg_ids = deque(maxlen=1000)
 
 
-@app.on_message(filters.command("start"))
-async def start_command(client, message):
-    await add_user(message.chat.id)
 
-    menu = ReplyKeyboardMarkup(
+def status_keyboard():
+    return ReplyKeyboardMarkup(
         [
             [KeyboardButton("Activate"), KeyboardButton("Deactivate")],
             [KeyboardButton("Mute"), KeyboardButton("Unmute")],
@@ -64,16 +62,23 @@ async def start_command(client, message):
         resize_keyboard=True,
     )
 
+@app.on_message(filters.command("start"))
+async def start_command(client, message):
+    await add_user(message.chat.id)
+
     await message.reply_text(
         "Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.",
-        reply_markup=menu,
+        reply_markup=status_keyboard(),
     )
 
 # FETCHING MESSAGES
-@userbot.on_message(filters.chat(CHANNELS))
-@userbot.on_edited_message(filters.chat(CHANNELS))
 async def monitor_channels(client, message):
-    global alert_status, city_threat_active, radar_history
+    global alert_status, city_threat_active, message_history, processed_msg_ids
+
+    msg_id_tuple = (message.chat.id, message.id)
+    if msg_id_tuple in processed_msg_ids:
+        return
+    processed_msg_ids.append(msg_id_tuple)
 
     if message.chat.username:
         source = f"@{message.chat.username}"
@@ -86,13 +91,13 @@ async def monitor_channels(client, message):
 
     logging.info(f"[MESSAGE] {source} - {text}")
 
+    message_history.append({"source": source, "text": text})
+
     if not alert_status:
-        # Save to buffer for later analysis
-        recent_messages.append({"source": source, "text": text})
         return
 
-    radar_history.append(text)
-    ai_response = await analyze_message(text, list(radar_history), city_threat_active)
+    history_texts = [msg["text"] for msg in message_history]
+    ai_response = await analyze_message(text, history_texts, city_threat_active)
 
     logging.info(f"[AI] {ai_response}")
 
@@ -102,7 +107,7 @@ async def monitor_channels(client, message):
         await set_all_mutes(1)
         for user_id in users:
             try:
-                formatted_message = f"🚨 {source}: {text}"
+                formatted_message = f"{source}: {text}\n\n__You are automatically muted until the alert is over.__"
                 await app.send_message(
                     chat_id=user_id,
                     text=formatted_message,
@@ -160,7 +165,7 @@ async def status_button(client, message):
 @app.on_message(filters.text & filters.regex("^Info$"))
 async def info_button(client, message):
     info_text = (
-        "This bot was created as a pet project by @vanago_official.\n\n"
+        "This bot was created as a pet project by @vanago_official."
         "It monitors radar channels in real-time and uses Artificial Intelligence "
         "to filter out spam, providing you with immediate alerts ONLY about direct "
         "ballistic or missile threats to your city."
@@ -214,22 +219,25 @@ async def main():
         while True:
             is_alert = await get_alert()
 
-            if is_alert and not alert_status:
+            if is_alert and not alert_status or True:
                 alert_status = True
                 city_threat_active = False
                 logging.info(f"[ALERT] {CITY}")
                 
-                # Check recent messages buffer
-                for msg in recent_messages:
-                    radar_history.append(msg["text"])
-                    ai_response = await analyze_message(msg["text"], list(radar_history), city_threat_active)
+                # Re-analyze recent messages from the buffer
+                history_texts = []
+                for msg in message_history:
+                    history_texts.append(msg["text"])
+                    ai_response = await analyze_message(msg["text"], history_texts.copy(), city_threat_active)
+                    logging.info(f"[AI BUFFER] {ai_response} for message: {msg['text']}")
                     if ai_response == "THREAT":
-                        city_threat_active = True
+                        if not city_threat_active:
+                            city_threat_active = True
+                            await set_all_mutes(1)
                         users = await get_active_users()
-                        await set_all_mutes(1)
                         for user_id in users:
                             try:
-                                formatted_message = f"🚨 {msg['source']}: {msg['text']}"
+                                formatted_message = f"{msg['source']}: {msg['text']}"
                                 await app.send_message(
                                     chat_id=user_id,
                                     text=formatted_message,
@@ -239,15 +247,13 @@ async def main():
                                 logging.error(f"[ERROR] {ex}")
                     elif ai_response == "CLEAR":
                         city_threat_active = False
-                recent_messages.clear()
 
             elif not is_alert and alert_status:
                 logging.info(f"[ALERT END] {CITY}")
                 alert_status = False
                 city_threat_active = False
                 await set_all_mutes(0)
-                recent_messages.clear()
-                radar_history.clear()
+                message_history.clear()
 
             await asyncio.sleep(60)
 
