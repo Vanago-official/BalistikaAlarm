@@ -40,7 +40,7 @@ app = Client(
 )
 
 userbot = Client(
-    "@balistika_alarm_session",
+    "@balistika_alarm_userbot",
     api_id=API_ID,
     api_hash=API_HASH,
 )
@@ -69,16 +69,9 @@ async def start_command(client, message):
         reply_markup=menu,
     )
 
-
-
-# DEBUG HANDLER
-@userbot.on_message(~filters.chat(CHANNELS) & filters.channel, group=-1)
-async def debug_monitor(client, message):
-    logging.info(f"[DEBUG] Message from non-target channel: {message.chat.title} (ID: {message.chat.id})")
-
-
 # FETCHING MESSAGES
 @userbot.on_message(filters.chat(CHANNELS))
+@userbot.on_edited_message(filters.chat(CHANNELS))
 async def monitor_channels(client, message):
     global alert_status, city_threat_active, radar_history
 
@@ -175,11 +168,35 @@ async def info_button(client, message):
     await message.reply_text(info_text)
 
 
+
+last_message_ids = {}
+
+async def poll_channels():
+    logging.info("[STATUS] Started background polling for channels to bypass Telegram restrictions...")
+    while True:
+        try:
+            for chat_id in CHANNELS:
+                try:
+                    async for msg in userbot.get_chat_history(chat_id, limit=1):
+                        if chat_id not in last_message_ids:
+                            last_message_ids[chat_id] = msg.id
+                        elif msg.id > last_message_ids[chat_id]:
+                            last_message_ids[chat_id] = msg.id
+                            # Manually trigger the handler
+                            logging.info(f"[POLL] Found new message in {chat_id}")
+                            await monitor_channels(userbot, msg)
+                except Exception as e:
+                    pass
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
 async def main():
     await init_db()
     await app.start()
     await userbot.start()
     logging.info("[STATUS] bot is started. Caching dialogs...")
+
     try:
         # Примусово провантажуємо всі чати в кеш Pyrogram
         async for _ in userbot.get_dialogs():
@@ -187,6 +204,9 @@ async def main():
         logging.info("[STATUS] Dialogs cached successfully.")
     except Exception as e:
         logging.warning(f"[STATUS] Could not cache dialogs: {e}")
+
+    asyncio.create_task(poll_channels())
+
 
     global alert_status
 
@@ -233,6 +253,7 @@ async def main():
 
     finally:
         await app.stop()
+        await userbot.stop()
 
 
 if __name__ == "__main__":

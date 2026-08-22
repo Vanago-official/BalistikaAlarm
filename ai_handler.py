@@ -26,7 +26,7 @@ SYSTEM_PROMPT = f"""Ти військовий аналітик. Твоя зад�
 5. Ігноруй повідомлення про інші міста (відповідай IGNORE)."""
 
 async def analyze_message(text: str, history: list, city_threat: bool) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={AI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={AI_KEY}"
     
     headers = {
         "Content-Type": "application/json"
