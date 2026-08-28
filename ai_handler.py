@@ -1,6 +1,8 @@
 import os
 import httpx
 import logging
+
+logger = logging.getLogger(__name__)
 import configparser
 from dotenv import load_dotenv
 
@@ -65,7 +67,7 @@ async def analyze_message(text: str, history: list, city_threat: bool) -> str:
             return answer
             
         except Exception as e:
-            logging.error(f"[AI ERROR] Gemini API Error: {e}")
+            logger.error(f"[AI ERROR] Gemini API Error: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                 logging.error(f"Response data: {e.response.text}")
+                 logger.error(f"Response data: {e.response.text}")
             return "IGNORE"
