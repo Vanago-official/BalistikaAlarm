@@ -120,6 +120,9 @@ async def monitor_channels(client, message):
                 )
             except Exception as ex:
                 logger.error(f"[ERROR] {ex}")
+    elif ai_response == "SEMITHREAT":
+        city_threat_active = True
+        logger.info("[AI] SEMITHREAT detected. city_threat_active set to True, but no message sent.")
     elif ai_response == "CLEAR":
         city_threat_active = False
 
@@ -262,6 +265,9 @@ async def main():
                                 )
                             except Exception as ex:
                                 logger.error(f"[ERROR] {ex}")
+                    elif ai_response == "SEMITHREAT":
+                        city_threat_active = True
+                        logger.info("[AI BUFFER] SEMITHREAT detected. city_threat_active set to True, but no message sent.")
                     elif ai_response == "CLEAR":
                         city_threat_active = False
 
@@ -270,7 +276,7 @@ async def main():
                 alert_status = False
                 city_threat_active = False
                 await set_all_mutes(0)
-                
+
                 users = await get_active_users()
                 for user_id in users:
                     try:
@@ -281,7 +287,7 @@ async def main():
                         )
                     except Exception as ex:
                         logger.error(f"[ERROR] {ex}")
-                        
+
                 message_history.clear()
 
             await asyncio.sleep(60)
