@@ -26,7 +26,7 @@ async def get_alert():
         city_alerts = alerts.get_alerts_by_location_title(CITY)
 
         if not city_alerts:
-            return False, []
+            return False, [], None
 
         # alert_level and threats are not parsed by the library,
         # so we fetch them from the raw cached response
@@ -37,16 +37,17 @@ async def get_alert():
         )
 
         if raw_city is None:
-            return False, []
+            return False, [], None
 
         alert_level = raw_city.get("alert_level")
+        alert_type = raw_city.get("alert_type")
         threats = raw_city.get("threats") or []
         threat_types = [
             t.get("threat_type") for t in threats if t.get("threat_type")
         ]
 
-        return alert_level, threat_types
+        return alert_level, threat_types, alert_type
 
     except Exception as e:  # noqa: BLE001
         logger.error(f"[API ERROR] Failed to check alert: {e}")
-        return False, []
+        return False, [], None

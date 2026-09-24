@@ -34,11 +34,20 @@ BOT_TOKEN = getenv("BOT_TOKEN")
 alert_status = False
 current_alert_level = None   # None, "yellow", "red"
 current_threat_types = []    # ["drones", "ballistic_missiles", ...]
+current_alert_type = None    # "air_raid", "artillery_shelling", etc.
 
 MISSILE_THREATS = {
     "ballistic_missiles",
     "cruise_missiles",
     "unspecified_missiles",
+}
+
+ALERT_TYPE_LABELS = {
+    "air_raid": "Air Raid",
+    "artillery_shelling": "Artillery Shelling",
+    "urban_fights": "Urban Fights",
+    "chemical": "Chemical Danger",
+    "nuclear": "Nuclear Danger",
 }
 
 THREAT_LABELS = {
@@ -126,21 +135,32 @@ async def status_button(message):
         return
 
     if current_alert_level:
-        level_text = LEVEL_LABELS.get(current_alert_level, f"⚠️ {current_alert_level}")
+        status_icon = "🔴" if current_alert_level == "red" else "🟡"
+        level_text = LEVEL_LABELS.get(
+            current_alert_level, f"{status_icon} {current_alert_level.capitalize()}"
+        )
+        status_lines = [
+            f"🚨 *Air Alert:* {status_icon} Active",
+            f"⚠️ *Level:* {level_text}",
+        ]
         if current_threat_types:
             threat_texts = [
                 THREAT_LABELS.get(t, t) for t in current_threat_types
             ]
-            threat_text = ", ".join(threat_texts)
-        else:
-            threat_text = "None specified"
-        alert_line = f"{level_text}\n💥 *Threat:* {threat_text}"
+            status_lines.append(f"🎯 *Threat Type:* {', '.join(threat_texts)}")
+        if current_alert_type and current_alert_type != "air_raid":
+            type_text = ALERT_TYPE_LABELS.get(
+                current_alert_type, current_alert_type
+            )
+            status_lines.append(f"📢 *Alert Type:* {type_text}")
+
+        alert_section = "\n".join(status_lines)
     else:
-        alert_line = "🟢 No active alerts"
+        alert_section = "🚨 *Air Alert:* 🟢 Inactive"
 
     await message.answer(
         f"📊 *Current Status:*\n\n"
-        f"🚨 *Air Alert:* {alert_line}\n\n"
+        f"{alert_section}\n\n"
         f"✅ *Active:* {'Yes' if info[0] else 'No'}\n"
         f"🔕 *Muted:* {'Yes' if info[1] else 'No'}",
         parse_mode=ParseMode.MARKDOWN,
@@ -159,20 +179,21 @@ async def info_button(message):
 
 
 async def alert_loop():
-    global alert_status, current_alert_level, current_threat_types
+    global alert_status, current_alert_level, current_threat_types, current_alert_type
     while True:
         try:
-            is_alert, threat_types = await get_alert()
+            is_alert, threat_types, alert_type = await get_alert()
             has_missile_threat = any(t in MISSILE_THREATS for t in threat_types)
             is_missile_danger = is_alert == "red" and has_missile_threat
 
             logger.info(
-                f"[ALERT] Level: {is_alert} | Threats: {threat_types} | Danger: {is_missile_danger}"
+                f"[ALERT] Level: {is_alert} | Type: {alert_type} | Threats: {threat_types} | Danger: {is_missile_danger}"
             )
 
             # Update current state for status display
             current_alert_level = is_alert if is_alert else None
             current_threat_types = threat_types
+            current_alert_type = alert_type
 
             # New missile danger alert detected
             if is_missile_danger and not alert_status:
