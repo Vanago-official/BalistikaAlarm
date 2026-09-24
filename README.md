@@ -4,17 +4,17 @@
 ![aiogram](https://img.shields.io/badge/aiogram-3.x-green)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 
-**Balistika Alarm Bot** is a Telegram bot that monitors the official Ukrainian air alert API in real-time and instantly notifies subscribed users about direct ballistic or cruise missile threats to their city.
+**Balistika Alarm Bot** is a Telegram bot that monitors the official Ukrainian air alert API in real-time and instantly notifies subscribed users about direct missile threats to their city.
 
 ---
 
 ## ✨ Features
 
-- 🚀 **Instant Alerts:** Polls the [alerts.in.ua](https://alerts.in.ua/) API every 10 seconds and immediately broadcasts a warning when a ballistic or missile threat is detected.
-- 🎯 **Threat Filtering:** Reacts exclusively to `ballistic_missiles`, `cruise_missiles`, and `unspecified_missiles` — ignoring other alert types.
+- 🚀 **Instant Alerts:** Polls the [alerts.in.ua](https://alerts.in.ua/) API every 10 seconds and immediately broadcasts a warning when a red-level threat is detected.
 - 🔕 **Smart Mute:** After the first warning, users are automatically muted to prevent spam. They receive the all-clear message when the threat ends, or can unmute manually at any time.
 - 📊 **Status Dashboard:** Users can check the current alert state, their activation status, and mute status via a button.
 - 💾 **Persistent Storage:** User preferences (active/muted) are stored in a local SQLite database via `aiosqlite`.
+- 🔄 **Built-in Caching:** Uses the official `alerts-in-ua` client with HTTP caching to minimize API load.
 
 ---
 
@@ -24,14 +24,14 @@
 main.py       — Bot handlers, keyboard, alert loop
 alarm.py      — API client for alerts.in.ua
 database.py   — SQLite operations (users, mute, active)
-config.cfg    — City ID and API endpoint
+config.cfg    — City configuration
 .env          — Bot token and API key (not committed)
 ```
 
 **How the alert loop works:**
 
 1. Every 10 seconds, the bot queries the alerts API for the configured city.
-2. If a new threat is detected (`alert_level == "red"` + matching threat type), it broadcasts `🔴 Danger!` to all active, unmuted users and mutes everyone.
+2. If a new threat is detected (`alert_level == "red"`), it broadcasts `🔴 Danger!` to all active, unmuted users and mutes everyone.
 3. When the threat ends, it broadcasts `🟢 Clear.` to all muted users and resets mute status.
 
 ---
@@ -59,7 +59,7 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
-API_ID=your_telegram_bot_token    # Token from @BotFather
+BOT_TOKEN=your_telegram_bot_token # Token from @BotFather
 ALARM=your_alerts_api_token       # Token from https://alerts.in.ua/
 ```
 
@@ -67,11 +67,10 @@ ALARM=your_alerts_api_token       # Token from https://alerts.in.ua/
 Edit `config.cfg`:
 ```ini
 [Settings]
-ALERT_API=https://api.alerts.in.ua/v1/alerts/active.json?token=
-CITY=61
+CITY=м. Київ
 ```
 
-> **Note:** `CITY` is a numeric region ID used by the alerts.in.ua API (e.g., `61` for Kyiv).
+> **Note:** `CITY` must match the exact `location_title` from the alerts.in.ua API (e.g., `м. Київ` for Kyiv city).
 
 ### 5. Run the bot
 ```bash
@@ -100,7 +99,7 @@ python main.py
 | `main.py` | Bot entry point, command handlers, alert broadcast loop |
 | `alarm.py` | Fetches and parses alert data from the API |
 | `database.py` | Async SQLite operations for user management |
-| `config.cfg` | API endpoint and city configuration |
+| `config.cfg` | City configuration |
 | `.env` | Secret tokens (not committed to git) |
 | `requirements.txt` | Python dependencies |
 
