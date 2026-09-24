@@ -21,14 +21,14 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from alarm import get_alert
 from database import *
 
-API_ID = getenv("API_ID")
+BOT_TOKEN = getenv("BOT_TOKEN")
 
 config = configparser.ConfigParser()
 config.read("config.cfg")
 
 alert_status = False
 
-bot = Bot(f"{API_ID}")
+bot = Bot(f"{BOT_TOKEN}")
 dp = Dispatcher()
 
 replyKeyboard = ReplyKeyboardMarkup(
