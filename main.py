@@ -6,300 +6,175 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 import asyncio
-import os
-from collections import deque
-
-try:
-    asyncio.get_running_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
 import configparser
+from os import getenv
 
 from dotenv import load_dotenv
-from pyrogram import Client, filters
-from pyrogram.types import KeyboardButton, ReplyKeyboardMarkup
-
-from ai_handler import analyze_message
-from alert import get_alert
-from database import *
 
 load_dotenv()
 
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from aiogram import Bot, Dispatcher, F
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+
+from alarm import get_alert
+from database import *
+
+API_ID = getenv("API_ID")
 
 config = configparser.ConfigParser()
 config.read("config.cfg")
 
-CHANNELS = [int(x.strip()) for x in config["Settings"]["CHANNELS"].split(",")]
-CITY = config["Settings"]["CITY"]
-
-app = Client(
-    "balistika_alarm_bot",
-    bot_token=BOT_TOKEN,
-    api_id=API_ID,
-    api_hash=API_HASH,
-)
-
-userbot = Client(
-    "@balistika_alarm_userbot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-)
-
 alert_status = False
-message_history = deque(maxlen=10)
-city_threat_active = False
-processed_msg_ids = deque(maxlen=1000)
 
+bot = Bot(f"{API_ID}")
+dp = Dispatcher()
 
-def status_keyboard():
-    return ReplyKeyboardMarkup(
+replyKeyboard = ReplyKeyboardMarkup(
+    keyboard=[
         [
-            [KeyboardButton("✅ Activate"), KeyboardButton("🛑 Deactivate")],
-            [KeyboardButton("🔕 Mute"), KeyboardButton("🔔 Unmute")],
-            [KeyboardButton("📊 Status"), KeyboardButton("ℹ️ Info")],
+            KeyboardButton(text="✅ Activate"),
+            KeyboardButton(text="🛑 Deactivate"),
         ],
-        resize_keyboard=True,
+        [
+            KeyboardButton(text="🔕 Mute"),
+            KeyboardButton(text="🔔 Unmute"),
+        ],
+        [
+            KeyboardButton(text="📊 Status"),
+            KeyboardButton(text="ℹ️ Info"),
+        ],
+    ],
+    resize_keyboard=True,
+)
+
+
+@dp.message(CommandStart())
+async def command_start_handler(message):
+    await add_user(message.from_user.id)
+
+    await message.answer(
+        "👋 Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.\n\n👇 Use the buttons below to control the bot:", reply_markup=replyKeyboard
     )
-
-
-@app.on_message(filters.command("start"))
-async def start_command(client, message):
-    await add_user(message.chat.id)
-
-    await message.reply_text(
-        "👋 Hi! I'm a bot that lets you monitor direct ballistic missile threats to the city of Kyiv.\n\n👇 Use the buttons below to control the bot:",
-        reply_markup=status_keyboard(),
-    )
-
-
-# FETCHING MESSAGES
-async def monitor_channels(client, message):
-    global alert_status, city_threat_active, message_history, processed_msg_ids
-
-    msg_id_tuple = (message.chat.id, message.id)
-    if msg_id_tuple in processed_msg_ids:
-        return
-    processed_msg_ids.append(msg_id_tuple)
-
-    if message.chat.username:
-        source = f"@{message.chat.username}"
-    else:
-        source = message.chat.title
-
-    text = message.text or message.caption
-    if not text:
-        return
-
-    logger.info(f"[MESSAGE] {source} - {text}")
-
-    message_history.append({"source": source, "text": text})
-
-    if not alert_status:
-        return
-
-    history_texts = [msg["text"] for msg in message_history]
-    ai_response = await analyze_message(text, history_texts, city_threat_active)
-
-    logger.info(f"[AI] {ai_response}")
-
-    if ai_response == "THREAT":
-        city_threat_active = True
-        users = await get_active_users()
-        await set_all_mutes(1)
-        for user_id in users:
-            try:
-                formatted_message = f"{source}: {text}\n\n__🔕 Alerts muted. You will not receive notifications until the all-clear signal.__"
-                await app.send_message(
-                    chat_id=user_id,
-                    text=formatted_message,
-                    reply_markup=status_keyboard(),
-                )
-            except Exception as ex:
-                logger.error(f"[ERROR] {ex}")
-    elif ai_response == "SEMITHREAT":
-        city_threat_active = True
-        logger.info("[AI] SEMITHREAT detected. city_threat_active set to True, but no message sent.")
-    elif ai_response == "CLEAR":
-        city_threat_active = False
 
 
 # MENU BUTTONS
-@app.on_message(filters.text & filters.regex("^✅ Activate$"))
-async def active_button(client, message):
-    await set_user_active(message.chat.id, 1)
-    await set_user_mute(message.chat.id, 0)
-    await message.reply_text("✅ Bot activated. You will now receive threat alerts.")
+@dp.message(F.text.regexp(r"^✅ Activate$"))
+async def active_button(message):
+    await set_user_active(message.from_user.id, 1)
+    await set_user_mute(message.from_user.id, 0)
+    await message.answer("✅ Bot activated. You will now receive threat alerts.", reply_markup=replyKeyboard)
 
 
-@app.on_message(filters.text & filters.regex("^🛑 Deactivate$"))
-async def deactivate_button(client, message):
-    await set_user_active(message.chat.id, 0)
-    await message.reply_text(
-        "🛑 Bot deactivated. You will no longer receive any alerts."
+@dp.message(F.text.regexp(r"^🛑 Deactivate$"))
+async def deactivate_button(message):
+    await set_user_active(message.from_user.id, 0)
+    await message.answer("🛑 Bot deactivated. You will no longer receive any alerts.", reply_markup=replyKeyboard)
+
+
+@dp.message(F.text.regexp(r"^🔕 Mute$"))
+async def mute_button(message):
+    await set_user_mute(message.from_user.id, 1)
+    await message.answer(
+        "🔕 Alerts muted. You will not receive notifications until the all-clear signal.", reply_markup=replyKeyboard
     )
 
 
-@app.on_message(filters.text & filters.regex("^🔕 Mute$"))
-async def mute_button(client, message):
-    await set_user_mute(message.chat.id, 1)
-    await message.reply_text(
-        "🔕 Alerts muted. You will not receive notifications until the all-clear signal."
-    )
+@dp.message(F.text.regexp(r"^🔔 Unmute$"))
+async def unmute_button(message):
+    await set_user_mute(message.from_user.id, 0)
+    await message.answer("🔔 Alerts unmuted. You will receive all notifications.", reply_markup=replyKeyboard)
 
 
-@app.on_message(filters.text & filters.regex("^🔔 Unmute$"))
-async def unmute_button(client, message):
-    await set_user_mute(message.chat.id, 0)
-    await message.reply_text("🔔 Alerts unmuted. You will receive all notifications.")
-
-
-@app.on_message(filters.text & filters.regex("^📊 Status$"))
-async def status_button(client, message):
-    info = await get_user_info(message.chat.id)
+@dp.message(F.text.regexp(r"^📊 Status$"))
+async def status_button(message):
+    info = await get_user_info(message.from_user.id)
 
     if info is None:
-        await message.reply_text(
+        await message.answer(
             "⚠️ Error: User not found in the database. Please send /start."
         )
         return
 
-    await message.reply_text(
+    await message.answer(
         f"📊 **Current Status:**\n\n"
         f"🚨 **Air Alert:** {'🔴 Active' if alert_status else '🟢 Inactive'}\n"
-        f"🎯 **City Threat:** {'🔴 Active' if city_threat_active else '🟢 Inactive'}\n\n"
         f"✅ **Activated:** {'Yes' if info[0] else 'No'}\n"
-        f"🔕 **Muted:** {'Yes' if info[1] else 'No'}"
+        f"🔕 **Muted:** {'Yes' if info[1] else 'No'}",parse_mode=ParseMode.MARKDOWN
+        , reply_markup=replyKeyboard
     )
 
 
-@app.on_message(filters.text & filters.regex("^ℹ️ Info$"))
-async def info_button(client, message):
+@dp.message(F.text.regexp("^ℹ️ Info$"))
+async def info_button(message):
     info_text = (
         "This bot was created as a pet project by @vanago_official. "
         "It monitors radar channels in real-time and uses Artificial Intelligence "
         "to filter out spam, providing you with immediate alerts ONLY about direct "
         "ballistic or missile threats to your city."
+
     )
-    await message.reply_text(info_text)
+    await message.answer(info_text, reply_markup=replyKeyboard)
 
 
-last_message_ids = {}
-
-
-async def poll_channels():
-    logger.info(
-        "[STATUS] Started background polling for channels to bypass Telegram restrictions..."
-    )
-    while True:
-        try:
-            for chat_id in CHANNELS:
-                try:
-                    async for msg in userbot.get_chat_history(chat_id, limit=1):
-                        if chat_id not in last_message_ids:
-                            last_message_ids[chat_id] = msg.id
-                        elif msg.id > last_message_ids[chat_id]:
-                            last_message_ids[chat_id] = msg.id
-                            # Manually trigger the handler
-                            logger.info(f"[POLL] Found new message in {chat_id}")
-                            await monitor_channels(userbot, msg)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        await asyncio.sleep(5)
-
-
-async def main():
-    await init_db()
-    await app.start()
-    await userbot.start()
-    logger.info("[STATUS] bot is started. Caching dialogs...")
-
-    try:
-        # Примусово провантажуємо всі чати в кеш Pyrogram
-        async for _ in userbot.get_dialogs():
-            pass
-        logger.info("[STATUS] Dialogs cached successfully.")
-    except Exception as e:
-        logger.warning(f"[STATUS] Could not cache dialogs: {e}")
-
-    asyncio.create_task(poll_channels())
-
+async def alert_loop():
     global alert_status
-
     try:
         while True:
             is_alert = await get_alert()
 
+            # Якщо почилась тривога і не було
             if is_alert and not alert_status:
-                alert_status = True
-                city_threat_active = False
-                logger.info(f"[ALERT] {CITY}")
+                users = await get_active_users()
+                await set_all_mutes(1)
 
-                # Re-analyze recent messages from the buffer
-                history_texts = []
-                for msg in message_history:
-                    history_texts.append(msg["text"])
-                    ai_response = await analyze_message(
-                        msg["text"], history_texts.copy(), city_threat_active
-                    )
-                    logger.info(
-                        f"[AI BUFFER] {ai_response} for message: {msg['text']}"
-                    )
-                    if ai_response == "THREAT":
-                        users = await get_active_users()
-                        if not city_threat_active:
-                            city_threat_active = True
-                            await set_all_mutes(1)
-                        for user_id in users:
-                            try:
-                                formatted_message = f"{msg['source']}: {msg['text']}"
-                                await app.send_message(
-                                    chat_id=user_id,
-                                    text=formatted_message,
-                                    reply_markup=status_keyboard(),
-                                )
-                            except Exception as ex:
-                                logger.error(f"[ERROR] {ex}")
-                    elif ai_response == "SEMITHREAT":
-                        city_threat_active = True
-                        logger.info("[AI BUFFER] SEMITHREAT detected. city_threat_active set to True, but no message sent.")
-                    elif ai_response == "CLEAR":
-                        city_threat_active = False
+                for user in users:
+                    try:
+                        await bot.send_message(chat_id=user, text="🔴 Danger!")
+                        await asyncio.sleep(0.05)
+                    except Exception as e:  # noqa: BLE001
+                        logger.error(
+                            f"[BOT ERROR] Сталася помилка при відправленні повідомлення користувачу {user}: {e}"
+                        )
 
+            # Якщо тривога кінчилась
             elif not is_alert and alert_status:
-                logger.info(f"[ALERT END] {CITY}")
-                alert_status = False
-                city_threat_active = False
+                users = await get_muted_users()
                 await set_all_mutes(0)
 
-                users = await get_active_users()
-                for user_id in users:
+                for user in users:
                     try:
-                        await app.send_message(
-                            chat_id=user_id,
-                            text="🟢 **All clear!** Alerts are unmuted. You will now receive notifications.",
-                            reply_markup=status_keyboard(),
+                        await bot.send_message(chat_id=user, text="🟢 Clear.")
+                        await asyncio.sleep(0.05)
+                    except Exception as e:  # noqa: BLE001
+                        logger.error(
+                            f"[BOT ERROR] Сталася помилка при відправленні повідомлення користувачу {user}: {e}"
                         )
-                    except Exception as ex:
-                        logger.error(f"[ERROR] {ex}")
 
-                message_history.clear()
+            alert_status = is_alert
+            await asyncio.sleep(10)
 
-            await asyncio.sleep(60)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[BOT ERROR]: {e}")
+        return False
 
     finally:
-        await app.stop()
-        await userbot.stop()
+        await dp.stop_polling()
+
+@dp.startup()
+async def on_startup():
+    await init_db()
+    asyncio.create_task(alert_loop())
+    logger.info("[STATUS] Bot started.")
+
+async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("\nBot stoped.")
