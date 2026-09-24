@@ -32,6 +32,26 @@ logging.basicConfig(
 BOT_TOKEN = getenv("BOT_TOKEN")
 
 alert_status = False
+current_alert_level = None   # None, "yellow", "red"
+current_threat_type = None   # None, "drones", "ballistic_missiles", etc.
+
+THREAT_LABELS = {
+    "ballistic_missiles": "🚀 Ballistic missiles",
+    "cruise_missiles": "🚀 Cruise missiles",
+    "unspecified_missiles": "🚀 Missiles (unspecified)",
+    "mig31k_departure": "✈️ MiG-31K departure (Kinzhal)",
+    "strategic_aircraft_activity": "✈️ Strategic aviation",
+    "tactic_aircraft_activity": "✈️ Tactical aviation",
+    "drones": "🛸 Drones (UAV)",
+    "guided_aerial_bombs": "💣 Guided aerial bombs",
+    "air_defense": "🛡 Air defense active",
+    "unknown": "❓ Unknown threat",
+}
+
+LEVEL_LABELS = {
+    "red": "🔴 Red (missile threat)",
+    "yellow": "🟡 Yellow (drone threat)",
+}
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
@@ -99,9 +119,16 @@ async def status_button(message):
         await message.answer("⚠️ User not found. Send /start to register.")
         return
 
+    if current_alert_level:
+        level_text = LEVEL_LABELS.get(current_alert_level, f"⚠️ {current_alert_level}")
+        threat_text = THREAT_LABELS.get(current_threat_type, current_threat_type or "Unknown")
+        alert_line = f"{level_text}\n💥 *Threat:* {threat_text}"
+    else:
+        alert_line = "🟢 No active alerts"
+
     await message.answer(
         f"📊 *Current Status:*\n\n"
-        f"🚨 *Air Alert:* {'🔴 Active' if alert_status else '🟢 Inactive'}\n"
+        f"🚨 *Air Alert:* {alert_line}\n\n"
         f"✅ *Active:* {'Yes' if info[0] else 'No'}\n"
         f"🔕 *Muted:* {'Yes' if info[1] else 'No'}",
         parse_mode=ParseMode.MARKDOWN,
@@ -120,11 +147,15 @@ async def info_button(message):
 
 
 async def alert_loop():
-    global alert_status
+    global alert_status, current_alert_level, current_threat_type
     while True:
         try:
             is_alert, threat_type = await get_alert()
             logger.info(f"[ALERT] {is_alert} - {threat_type}")
+
+            # Update current state for status display
+            current_alert_level = is_alert if is_alert else None
+            current_threat_type = threat_type
 
             # New threat alert detected
             if is_alert == "red" and not alert_status:
