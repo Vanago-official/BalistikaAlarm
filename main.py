@@ -33,7 +33,13 @@ BOT_TOKEN = getenv("BOT_TOKEN")
 
 alert_status = False
 current_alert_level = None   # None, "yellow", "red"
-current_threat_type = None   # None, "drones", "ballistic_missiles", etc.
+current_threat_types = []    # ["drones", "ballistic_missiles", ...]
+
+MISSILE_THREATS = {
+    "ballistic_missiles",
+    "cruise_missiles",
+    "unspecified_missiles",
+}
 
 THREAT_LABELS = {
     "ballistic_missiles": "🚀 Ballistic missiles",
@@ -121,7 +127,13 @@ async def status_button(message):
 
     if current_alert_level:
         level_text = LEVEL_LABELS.get(current_alert_level, f"⚠️ {current_alert_level}")
-        threat_text = THREAT_LABELS.get(current_threat_type, current_threat_type or "Unknown")
+        if current_threat_types:
+            threat_texts = [
+                THREAT_LABELS.get(t, t) for t in current_threat_types
+            ]
+            threat_text = ", ".join(threat_texts)
+        else:
+            threat_text = "None specified"
         alert_line = f"{level_text}\n💥 *Threat:* {threat_text}"
     else:
         alert_line = "🟢 No active alerts"
@@ -147,18 +159,24 @@ async def info_button(message):
 
 
 async def alert_loop():
-    global alert_status, current_alert_level, current_threat_type
+    global alert_status, current_alert_level, current_threat_types
     while True:
         try:
-            is_alert, threat_type = await get_alert()
-            logger.info(f"[ALERT] {is_alert} - {threat_type}")
+            is_alert, threat_types = await get_alert()
+            has_missile_threat = any(t in MISSILE_THREATS for t in threat_types)
+            is_missile_danger = is_alert == "red" and has_missile_threat
+
+            logger.info(
+                f"[ALERT] Level: {is_alert} | Threats: {threat_types} | Danger: {is_missile_danger}"
+            )
 
             # Update current state for status display
             current_alert_level = is_alert if is_alert else None
-            current_threat_type = threat_type
+            current_threat_types = threat_types
 
-            # New threat alert detected
-            if is_alert == "red" and not alert_status:
+            # New missile danger alert detected
+            if is_missile_danger and not alert_status:
+                alert_status = True
                 users = await get_active_users()
                 await set_all_mutes(1)
 
@@ -171,8 +189,9 @@ async def alert_loop():
                             f"[BOT ERROR] Failed to send message to user {user}: {e}"
                         )
 
-            # Threat alert ended
-            elif not is_alert and alert_status:
+            # Missile danger ended
+            elif not is_missile_danger and alert_status:
+                alert_status = False
                 users = await get_muted_users()
                 await set_all_mutes(0)
 
@@ -184,8 +203,6 @@ async def alert_loop():
                         logger.error(
                             f"[BOT ERROR] Failed to send message to user {user}: {e}"
                         )
-
-            alert_status = is_alert == "red"
 
         except Exception as e:  # noqa: BLE001
             logger.error(f"[ALERT LOOP ERROR]: {e}")

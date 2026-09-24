@@ -10,9 +10,9 @@
 
 ## ✨ Features
 
-- 🚀 **Instant Alerts:** Polls the [alerts.in.ua](https://alerts.in.ua/) API every 10 seconds and immediately broadcasts a warning when a red-level threat is detected.
+- 🚀 **Missile Threat Filtering:** Polls the [alerts.in.ua](https://alerts.in.ua/) API every 10 seconds and broadcasts alerts exclusively for red-level missile threats (`ballistic_missiles`, `cruise_missiles`, `unspecified_missiles`), ignoring general or drone-only alerts.
 - 🔕 **Smart Mute:** After the first warning, users are automatically muted to prevent spam. They receive the all-clear message when the threat ends, or can unmute manually at any time.
-- 📊 **Status Dashboard:** Users can check the current alert state, their activation status, and mute status via a button.
+- 📊 **Status Dashboard:** Users can check the current alert state, active threat types, activation status, and mute status via a button.
 - 💾 **Persistent Storage:** User preferences (active/muted) are stored in a local SQLite database via `aiosqlite`.
 - 🔄 **Built-in Caching:** Uses the official `alerts-in-ua` client with HTTP caching to minimize API load.
 
@@ -31,8 +31,8 @@ config.cfg    — City configuration
 **How the alert loop works:**
 
 1. Every 10 seconds, the bot queries the alerts API for the configured city.
-2. If a new threat is detected (`alert_level == "red"`), it broadcasts `🔴 Danger!` to all active, unmuted users and mutes everyone.
-3. When the threat ends, it broadcasts `🟢 Clear.` to all muted users and resets mute status.
+2. If a new threat is detected (`alert_level == "red"` AND missile threat is present), it broadcasts `🔴 Danger!` to all active, unmuted users and mutes everyone.
+3. When the threat ends (all-clear or downgrade), it broadcasts `🟢 Clear.` to all muted users and resets mute status.
 
 ---
 
