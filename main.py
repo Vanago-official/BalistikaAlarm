@@ -122,10 +122,11 @@ async def alert_loop():
     global alert_status
     try:
         while True:
-            is_alert = await get_alert()
+            is_alert, threat_type = await get_alert()
+            logger.info(f"[ALERT] {is_alert} - {threat_type}")
 
-            # Якщо почилась тривога і не було
-            if is_alert and not alert_status:
+            # Якщо тривога "red" (або інша) і раніше не було
+            if is_alert == "red" and not alert_status:
                 users = await get_active_users()
                 await set_all_mutes(1)
 
@@ -138,7 +139,7 @@ async def alert_loop():
                             f"[BOT ERROR] Сталася помилка при відправленні повідомлення користувачу {user}: {e}"
                         )
 
-            # Якщо тривога кінчилась
+            # Якщо тривога кінчилась (is_alert стає False)
             elif not is_alert and alert_status:
                 users = await get_muted_users()
                 await set_all_mutes(0)
@@ -152,15 +153,12 @@ async def alert_loop():
                             f"[BOT ERROR] Сталася помилка при відправленні повідомлення користувачу {user}: {e}"
                         )
 
-            alert_status = is_alert
+            alert_status = is_alert == "red"
             await asyncio.sleep(10)
 
     except Exception as e:  # noqa: BLE001
         logger.error(f"[BOT ERROR]: {e}")
         return False
-
-    finally:
-        await dp.stop_polling()
 
 @dp.startup()
 async def on_startup():
