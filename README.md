@@ -137,7 +137,7 @@ python main.py
 
 | Button | Action |
 |--------|--------|
-| ✅ Activate | Subscribe to threat alerts |
+| 🟢 Activate | Subscribe to threat alerts |
 | 🛑 Deactivate | Unsubscribe from all alerts |
 | 🟢 Send clear / 🔴 Don't send clear | Toggle official "Clear" messages |
 | 🟢 Send AI clear / 🔴 Don't send AI clear | Toggle AI-generated "Probably clear" messages |
